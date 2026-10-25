@@ -267,6 +267,7 @@ html,body{overscroll-behavior-y:none}
 .medios{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--chip);border-radius:12px;padding:4px;gap:4px}
 .medios button{border:0;background:none;border-radius:9px;padding:9px 2px;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:430px){.medios{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.medios.dos{grid-template-columns:repeat(2,minmax(0,1fr))}
 .medios button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .cuota-otra{width:84px;padding:8px 10px;border-radius:999px;text-align:center;font-size:15px}
 .cuota-otra.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
@@ -625,6 +626,7 @@ function pendRow(m){
 /* ---------- Medios de pago, tarjetas, cuotas y saldos ---------- */
 const MEDIOS=[["efectivo","Efectivo"],["transferencia","Transferencia"],["debito","Débito"],["credito","Crédito"]];
 const MEDIO_LBL=Object.fromEntries(MEDIOS);
+const MEDIOS_ING=[["efectivo","Efectivo"],["transferencia","Transferencia"]];
 function lsGet(k){ try{ return localStorage.getItem("libreta-"+k); }catch(e){ return null; } }
 function lsSet(k,v){ try{ localStorage.setItem("libreta-"+k, v); }catch(e){} }
 
@@ -1024,6 +1026,8 @@ function renderResumen(){
     <div class="stat"><span>Te queda</span><b class="num" style="color:${saldo<0?"var(--neg)":"var(--pos)"}">${saldo<0?"−":""}${short(Math.abs(saldo))}</b><small>ingresos − gastos</small></div>
     <div class="stat"><span>Ahorro</span><b class="num">${ahorro}%</b><small>de lo que entró</small></div></div>`;
   h+=donutCard("Por trabajo",topN(sumBy(ingresos,"cat"),6),I,"INGRESOS");
+  if(ingresos.some(x=>x.medio)){ const pm={}; ingresos.forEach(x=>{ const k=x.medio?MEDIO_LBL[x.medio]:"Sin dato"; pm[k]=(pm[k]||0)+x.monto; });
+    h+=donutCard("Cómo cobraste",Object.entries(pm).sort((a,b)=>b[1]-a[1]),I,"INGRESOS"); }
   const g6=meses.map(mm=>({label:mesCorto(mm),hi:mm===ym,vals:[{v:total(monthMovs(mm,"ingreso")),col:"var(--pos)"},{v:total(monthMovs(mm,"gasto")),col:"var(--c4)"}]}));
   g6.forEach(g=>{ if(!g.hi) g.hi=false; });
   h+=`<div class="card"><h5>Ingresos vs gastos, 6 meses</h5>${barChart(g6)}<div class="keys"><span><i style="background:var(--pos)"></i>Ingresos</span><span><i style="background:var(--c4)"></i>Gastos</span></div></div>`;
@@ -1067,6 +1071,7 @@ function sheetMov(mov, compra){
   let st;
   if(compra) st={id:compra.id,tipo:"gasto",fecha:compra.fecha,monto:compra.total,montoOrig:compra.moneda==="USD"?compra.total:null,cat:compra.cat,clase:compra.clase||null,nota:compra.nota||"",moneda:compra.moneda||"ARS",medio:"credito",tarjeta:compra.tarjeta,cuotas:compra.cuotas,creado:compra.creado};
   else st = mov ? {...mov} : {id:uid(), tipo:"gasto", fecha:todayISO(), monto:null, cat:null, clase:null, nota:"", moneda:"ARS", medio:lsGet("medio")||null};
+  if(st.tipo==="ingreso" && st.medio!=="efectivo" && st.medio!=="transferencia") st.medio = mov ? null : (lsGet("medio-ing")||"transferencia");
   st.moneda = st.moneda||"ARS";
   if(!st.cuotas) st.cuotas=1;
   const esCuota=!!st.compraId;
@@ -1090,7 +1095,7 @@ function sheetMov(mov, compra){
     <div class="chips" id="f-cats"></div>
     <div id="f-pago-box">
       <span class="flabel" id="lbl-pago">Cómo pagaste</span>
-      <div class="medios" id="f-medios">${MEDIOS.map(([k,l])=>`<button type="button" data-medio="${k}">${l}</button>`).join("")}</div>
+      <div class="medios" id="f-medios"></div>
       <div id="f-fondo-box"><span class="flabel" id="lbl-fondo">Desde</span><div class="chips" id="f-fondos"></div></div>
       <div id="f-cred-box">
         <span class="flabel">Tarjeta</span><div class="chips" id="f-tarjs"></div>
@@ -1143,18 +1148,20 @@ function sheetMov(mov, compra){
     /* Medio de pago, billetera y tarjeta */
     const paintPago=()=>{
       const g=st.tipo==="gasto", fids=fondoIds();
-      $("#f-pago-box").hidden = esCuota || (!g && !fids.length);
-      $("#lbl-pago").hidden = !g; $("#f-medios").hidden = !g;
-      sh.querySelectorAll("[data-medio]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.medio===st.medio));
-      let opts=[], key=g?st.medio:"ingreso";
-      if(g){ if(st.medio==="efectivo") opts=fids.filter(id=>fondoTipo(id)==="efectivo"); else if(st.medio==="transferencia"||st.medio==="debito") opts=fids.filter(id=>fondoTipo(id)==="billetera"); }
-      else opts=fids;
-      if(fondoSel===undefined || (fondoSel && !opts.includes(fondoSel))) fondoSel = defaultFondo(key,opts);
-      const showF = opts.length>0 && !(g && st.medio==="efectivo" && opts.length===1);
+      $("#f-pago-box").hidden = esCuota;
+      const lista = g ? MEDIOS : MEDIOS_ING;
+      $("#f-medios").className = "medios"+(g?"":" dos");
+      $("#f-medios").innerHTML = lista.map(([k,l])=>`<button type="button" data-medio="${k}" aria-pressed="${st.medio===k}">${l}</button>`).join("");
+      $("#lbl-pago").textContent = g ? "Cómo pagaste" : esPend() ? "Cómo lo vas a cobrar" : "Cómo lo cobraste";
+      let opts=[], key=g?st.medio:"ing-"+st.medio;
+      if(st.medio==="efectivo") opts=fids.filter(id=>fondoTipo(id)==="efectivo");
+      else if(st.medio==="transferencia"||st.medio==="debito") opts=fids.filter(id=>fondoTipo(id)==="billetera");
+      if(fondoSel===undefined || (fondoSel && !opts.includes(fondoSel))) fondoSel = defaultFondo(st.medio==="efectivo"?"efectivo":key,opts);
+      const showF = opts.length>0 && !(st.medio==="efectivo" && opts.length===1);
       $("#f-fondo-box").hidden=!showF;
-      $("#lbl-fondo").textContent = g ? "Desde" : "Cobrado en";
+      $("#lbl-fondo").textContent = g ? "Desde" : "A dónde fue";
       if(showF){
-        const none = g ? (st.medio==="efectivo"?"Otro":"Cuenta bancaria") : "Banco / otro";
+        const none = st.medio==="efectivo" ? "Otro" : "Cuenta bancaria";
         $("#f-fondos").innerHTML = opts.map(id=>`<button type="button" data-fondo="${esc(id)}" aria-pressed="${fondoSel===id}">${esc(fondoNombre(id))}</button>`).join("")+`<button type="button" data-fondo="" aria-pressed="${!fondoSel}">${none}</button>`;
       }
       $("#f-cred-box").hidden = !esCred();
@@ -1245,9 +1252,9 @@ function sheetMov(mov, compra){
     tcIn.addEventListener("input",()=>{ tcTocado=true; paintTcHint(); });
     inp.addEventListener("input",()=>{ paintTcHint(); paintCuotaHint(); });
     fecha.addEventListener("change",()=>{ paintMoneda(); });
-    pend.addEventListener("change",()=>{ paintPend(); paintMoneda(); });
+    pend.addEventListener("change",()=>{ paintPago(); paintMoneda(); });
     $("#f-clases").addEventListener("click",e=>{ const b=e.target.closest("[data-clase]"); if(!b) return; st.clase = st.clase===b.dataset.clase ? null : b.dataset.clase; paintClase(); });
-    $("#f-tipos").addEventListener("click",e=>{ const b=e.target.closest("[data-tipo]"); if(!b||b.dataset.tipo===st.tipo) return; st.tipo=b.dataset.tipo; st.cat=null; adding=false; fondoSel=undefined; paint(); });
+    $("#f-tipos").addEventListener("click",e=>{ const b=e.target.closest("[data-tipo]"); if(!b||b.dataset.tipo===st.tipo) return; st.tipo=b.dataset.tipo; st.cat=null; adding=false; fondoSel=undefined; st.medio = st.tipo==="gasto" ? (lsGet("medio")||null) : (lsGet("medio-ing")||"transferencia"); paint(); });
     if(!editing) setTimeout(()=>inp.focus(),60);
     $("#f-save").addEventListener("click",async()=>{
       const monto=parseMonto(inp.value);
@@ -1284,13 +1291,13 @@ function sheetMov(mov, compra){
       if(st.fechaTrabajo) obj.fechaTrabajo=st.fechaTrabajo;
       if(st.cobradoTs) obj.cobradoTs=st.cobradoTs;
       if(esCuota){ ["compraId","cuota","tarjeta","medio"].forEach(k=>{ if(st[k]!=null) obj[k]=st[k]; }); }
-      else if(st.tipo==="gasto" && st.medio){ obj.medio=st.medio; }
+      else if(st.medio){ obj.medio=st.medio; }
       if(!esCuota && !$("#f-pago-box").hidden){
-        if(st.tipo==="gasto" && st.medio==="efectivo" && $("#f-fondo-box").hidden){ const ef=fondoIds().filter(id=>fondoTipo(id)==="efectivo"); if(ef.length===1) fondoSel=ef[0]; }
+        if(st.medio==="efectivo" && $("#f-fondo-box").hidden){ const ef=fondoIds().filter(id=>fondoTipo(id)==="efectivo"); if(ef.length===1) fondoSel=ef[0]; }
         if(fondoSel && (st.tipo==="ingreso" || st.medio!=="credito")) obj.fondo=fondoSel;
-        lsSet("fondo-"+(st.tipo==="gasto"?st.medio:"ingreso"), fondoSel||"");
+        lsSet("fondo-"+(st.tipo==="gasto"||st.medio==="efectivo"?st.medio:"ing-"+st.medio), fondoSel||"");
       }
-      if(st.tipo==="gasto" && st.medio) lsSet("medio",st.medio);
+      if(st.medio) lsSet(st.tipo==="gasto"?"medio":"medio-ing", st.medio);
       try{
         if(compra) await del("compras",compra.id);
         await put("movs",obj); closeSheet(); S.month=f.slice(0,7); render(); toast(esPend()?"Guardado como pendiente de cobro":st.tipo==="gasto"?"Gasto guardado":"Ingreso guardado");
@@ -1485,7 +1492,7 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 3</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 4</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);

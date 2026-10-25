@@ -1,7 +1,7 @@
 {
-  "name": "Bitácora",
-  "short_name": "Bitácora",
-  "description": "Gastos, ingresos y services de vehículos",
+  "name": "Libreta",
+  "short_name": "Libreta",
+  "description": "Gastos, ingresos, tarjetas y services de vehículos",
   "lang": "es-AR",
   "id": "./",
   "start_url": "./",

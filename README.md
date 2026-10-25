@@ -1,6 +1,6 @@
-# Bitácora
+# Libreta
 
-App personal para el celu: gastos e ingresos (pesos y dólares), pendientes de cobro, resumen con gráficos y services de vehículos.
+App personal para el celu: gastos e ingresos (pesos y dólares), medios de pago, tarjetas en cuotas, saldos de efectivo y billeteras, pendientes de cobro, resumen con gráficos y services de vehículos.
 
 - **App:** https://carlosalzo.github.io/bitacora/
 - **Datos:** Firebase (inicio de sesión con Google + Firestore). Cada usuario solo ve lo suyo.

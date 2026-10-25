@@ -262,6 +262,8 @@ html,body{overscroll-behavior-y:none}
 .list > .item:first-child{border-top:0}
 .donutwrap{grid-template-columns:128px minmax(0,1fr)}
 .legend span{white-space:normal;line-height:1.2}
+.setup{padding-block:12px 40px}
+.pick button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .filebtn{display:flex;align-items:center;justify-content:center;cursor:pointer;text-align:center}
 </style>
 </head>
@@ -308,18 +310,20 @@ const PAL = ["var(--c1)","var(--c2)","var(--c3)","var(--c4)","var(--c5)","var(--
 const SERV_TIPOS = ["Cambio de aceite","Filtros","Service general","Cubiertas","Frenos","Cadena / correa","Batería","Otro"];
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
-const defaultCfg = () => ({
-  trabajos:["Trayken","AgroTec","Otro"],
-  catsExtra:[],
-  vehiculos:{ moto:{nombre:"Moto",km:0,tipo:"Moto",orden:1}, auto:{nombre:"Auto",km:0,tipo:"Auto",orden:2} }
-});
+const defaultCfg = () => ({ trabajos:["Sueldo","Otro"], catsExtra:[], vehiculos:{} });
+/* Sugerencias para la primera vez y para el selector de Ajustes */
+const SUG_GASTO = [...CATS.map(c=>c[0]), "Alquiler","Farmacia","Educación","Suscripciones","Regalos","Hijos"];
+const PRE_GASTO = ["Súper","Combustible","Comida afuera","Casa","Servicios","Salud","Ocio","Otros"];
+const SUG_INGRESO = ["Sueldo","Trabajo independiente","Changas","Alquileres","Ventas","Inversiones","Aguinaldo","Otro"];
+const PRE_INGRESO = ["Sueldo","Otro"];
 
 /* ---------- Estado ---------- */
-const S = { movs:[], servs:[], cfg:defaultCfg(), mode:"boot", tab:"plata", month:todayISO().slice(0,7), res:"gastos", cotiz:{hist:{}}, cotizBase:null, cotizMan:null, authErr:null, cur:"ARS" };
+const S = { movs:[], servs:[], cfg:defaultCfg(), setup:null, mode:"boot", tab:"plata", month:todayISO().slice(0,7), res:"gastos", cotiz:{hist:{}}, cotizBase:null, cotizMan:null, authErr:null, cur:"ARS" };
 
 /* Categorías: las de fábrica + las que agregues, ordenadas por cuántas veces las usaste */
+function gastoCats(){ return Array.isArray(S.cfg.catsGasto) ? S.cfg.catsGasto : [...CATS.map(c=>c[0]), ...(S.cfg.catsExtra||[])]; }
 function catList(tipo){
-  const base = tipo==="gasto" ? [...CATS.map(c=>c[0]), ...(S.cfg.catsExtra||[])] : [...S.cfg.trabajos];
+  const base = tipo==="gasto" ? [...gastoCats()] : [...S.cfg.trabajos];
   const cnt={}; S.movs.forEach(m=>{ if(m.tipo===tipo) cnt[m.cat]=(cnt[m.cat]||0)+1; });
   return base.map((c,i)=>({c,i,n:cnt[c]||0})).sort((a,b)=>b.n-a.n||a.i-b.i).map(x=>x.c);
 }
@@ -441,7 +445,7 @@ async function initStore(){
   FB.authM.onAuthStateChanged(FB.auth, u=>{
     UNSUBS.forEach(f=>f()); UNSUBS=[];
     USER=u;
-    if(!u){ S.mode="auth"; S.movs=[]; S.servs=[]; S.cfg=defaultCfg(); S.cotizMan=null; mergeCotiz(); render(); return; }
+    if(!u){ S.setup=null; S.mode="auth"; S.movs=[]; S.servs=[]; S.cfg=defaultCfg(); S.cotizMan=null; mergeCotiz(); render(); return; }
     S.mode="loading"; S.authErr=null; render();
     const ready={movs:0,servs:0,cfg:0};
     const done=()=>{ if(ready.movs&&ready.servs&&ready.cfg) S.mode="db"; render(); };
@@ -452,6 +456,8 @@ async function initStore(){
     UNSUBS.push(onSnapshot(uref("meta","config"), s=>{
       const c=s.exists()?s.data():null;
       S.cfg = c ? clean(Object.assign(defaultCfg(), c)) : defaultCfg();
+      if(!c && !s.metadata.fromCache && !S.setup) S.setup={ gasto:[...PRE_GASTO], ingreso:[...PRE_INGRESO], extraG:[], extraI:[] };
+      if(c) S.setup=null;
       ready.cfg=1; done();
     }, onErr));
     UNSUBS.push(onSnapshot(uref("meta","cotiz"), s=>{ S.cotizMan=s.exists()?s.data():null; mergeCotiz(); if(S.mode==="db") render(); }, ()=>{}));
@@ -471,7 +477,64 @@ async function login(){
 }
 async function logout(){ closeSheet(); await FB.authM.signOut(FB.auth); toast("Sesión cerrada"); }
 
+function pickerHtml(id,sug,sel,extra){
+  const all=[...new Set([...sug,...extra,...sel])];
+  return `<div class="chips pick" data-pick="${id}">${all.map(c=>`<button type="button" data-chip="${esc(c)}" aria-pressed="${sel.includes(c)}">${sel.includes(c)?"✓ ":""}${esc(c)}</button>`).join("")}</div>
+    <div class="addrow" style="margin-top:10px"><input class="field" id="add-${id}" maxlength="24" placeholder="Agregar otra…" aria-label="Agregar otra"><button type="button" data-addpick="${id}">Agregar</button></div>`;
+}
+function renderSetup(){
+  const st=S.setup;
+  return `<div class="setup">
+    <h1 class="gate-title" style="font-size:36px">Armá tu Bitácora</h1>
+    <p class="gate-sub">Elegí las categorías que vas a usar. Las marcadas ya quedan listas; tocá para sacar o sumar.</p>
+    <h3 class="sec" style="margin-top:22px">En qué gastás <span>${st.gasto.length} elegidas</span></h3>
+    ${pickerHtml("gasto",SUG_GASTO,st.gasto,st.extraG)}
+    <h3 class="sec" style="margin-top:26px">De dónde vienen tus ingresos <span>${st.ingreso.length} elegidas</span></h3>
+    ${pickerHtml("ingreso",SUG_INGRESO,st.ingreso,st.extraI)}
+    <p class="hint" style="margin-top:18px">No tiene que quedar perfecto: después podés agregar o sacar categorías desde Ajustes, o crear una nueva en el momento de cargar un gasto o un ingreso. Los vehículos se agregan desde su pestaña.</p>
+    <p class="err" id="setup-err"></p>
+    <button class="primary gate-btn" data-act="setupDone">Empezar</button>
+  </div>`;
+}
+function pickToggle(list,c){ const i=list.indexOf(c); if(i>=0) list.splice(i,1); else list.push(c); }
+function pickAdd(list,extra,val,sug){
+  const n=val.trim().replace(/\s+/g," "); if(!n) return false;
+  const ex=[...sug,...extra,...list].find(x=>x.toLowerCase()===n.toLowerCase());
+  if(ex){ if(!list.includes(ex)) list.push(ex); return true; }
+  extra.push(n); list.push(n); return true;
+}
+async function setupDone(){
+  const st=S.setup;
+  if(!st.gasto.length || !st.ingreso.length){ document.getElementById("setup-err").textContent="Elegí al menos una categoría de gasto y una de ingreso."; return; }
+  S.cfg={ ...defaultCfg(), catsGasto:[...st.gasto], catsExtra:[], trabajos:[...st.ingreso] };
+  S.setup=null; await saveCfg(); toast("¡Listo! Ya podés cargar tu primer movimiento");
+}
+function sheetCats(tipo){
+  const g=tipo==="gasto";
+  const st={ sel: g?[...gastoCats()]:[...S.cfg.trabajos], extra:[] };
+  const sug = g?SUG_GASTO:SUG_INGRESO;
+  const paint=sh=>{ sh.querySelector("#pk").innerHTML=pickerHtml("x",sug,st.sel,st.extra); sh.querySelector("#pk-n").textContent=st.sel.length+" elegidas"; };
+  openSheet(`<h4>${g?"Categorías de gasto":"Trabajos / ingresos"}</h4>
+    <p class="hint" style="margin-top:-6px">Tocá para sacar o sumar. Sacar una no borra los movimientos que ya cargaste con ella.</p>
+    <span class="flabel" id="pk-n"></span><div id="pk"></div>
+    <div class="err" id="pk-err"></div>
+    <div class="actions"><button type="button" class="primary" id="pk-save">Guardar</button></div>`,
+  sh=>{
+    paint(sh);
+    sh.addEventListener("click",e=>{
+      const c=e.target.closest("#pk [data-chip]"); if(c){ pickToggle(st.sel,c.dataset.chip); paint(sh); return; }
+      if(e.target.closest("[data-addpick]")){ pickAdd(st.sel,st.extra,sh.querySelector("#add-x").value,sug); paint(sh); }
+    });
+    sh.addEventListener("keydown",e=>{ if(e.key==="Enter"&&e.target.id==="add-x"){ e.preventDefault(); pickAdd(st.sel,st.extra,e.target.value,sug); paint(sh); sh.querySelector("#add-x").focus(); } });
+    sh.querySelector("#pk-save").addEventListener("click",async()=>{
+      if(!st.sel.length){ sh.querySelector("#pk-err").textContent="Dejá al menos una."; return; }
+      if(g){ S.cfg.catsGasto=[...st.sel]; S.cfg.catsExtra=[]; } else S.cfg.trabajos=[...st.sel];
+      await saveCfg(); closeSheet(); toast("Guardado");
+    });
+  });
+}
 function renderGate(){
+  if(S.mode==="db" && S.setup) return renderSetup();
   if(S.mode==="boot") return `<div class="gate"><div class="gate-card"><p class="gate-sub">Abriendo…</p></div></div>`;
   if(S.mode==="error") return `<div class="gate"><div class="gate-card">
     <h1 class="gate-title">Sin conexión</h1>
@@ -564,7 +627,7 @@ function pendientes(v){
 
 /* ---------- Render ---------- */
 function render(){
-  const gate = S.mode==="boot"||S.mode==="auth"||S.mode==="error";
+  const gate = S.mode==="boot"||S.mode==="auth"||S.mode==="error"||(S.mode==="db"&&!!S.setup);
   document.querySelector("nav.tabs").hidden=gate; document.getElementById("fab").hidden=gate; document.getElementById("btnCfg").hidden=gate; document.querySelector("header.top").hidden=gate;
   if(gate){ document.getElementById("fab2").hidden=true; document.getElementById("view").innerHTML=renderGate(); return; }
   document.getElementById("tab-plata").setAttribute("aria-selected",S.tab==="plata");
@@ -867,10 +930,10 @@ function sheetMov(mov){
     const addCat=async()=>{
       const name=(cats.querySelector("#f-newcat").value||"").trim().replace(/\s+/g," ");
       if(!name){ err.textContent="Escribí un nombre."; return; }
-      const all = st.tipo==="gasto" ? [...CATS.map(c=>c[0]),...(S.cfg.catsExtra||[])] : S.cfg.trabajos;
+      const all = st.tipo==="gasto" ? gastoCats() : S.cfg.trabajos;
       const ya = all.find(c=>c.toLowerCase()===name.toLowerCase());
       if(!ya){
-        if(st.tipo==="gasto") S.cfg.catsExtra=[...(S.cfg.catsExtra||[]),name];
+        if(st.tipo==="gasto"){ if(Array.isArray(S.cfg.catsGasto)) S.cfg.catsGasto=[...S.cfg.catsGasto,name]; else S.cfg.catsExtra=[...(S.cfg.catsExtra||[]),name]; }
         else S.cfg.trabajos=[...S.cfg.trabajos,name];
         await saveCfg();
       }
@@ -1089,12 +1152,8 @@ function sheetVeh(id){
 
 function sheetCfg(){
   openSheet(`<h4>Ajustes</h4>
-    <label class="flabel" for="c-jobs" style="margin-top:0">Mis trabajos (separados por coma)</label>
-    <input class="field" id="c-jobs" value="${esc(S.cfg.trabajos.join(", "))}">
-    <label class="flabel" for="c-cats">Categorías que agregaste (separadas por coma)</label>
-    <input class="field" id="c-cats" value="${esc((S.cfg.catsExtra||[]).join(", "))}" placeholder="Todavía no agregaste ninguna">
-    <p class="hint">Borrar una de acá no borra los gastos que ya cargaste con ella.</p>
-    <div class="actions"><button type="button" class="primary" id="c-save">Guardar ajustes</button></div>
+    <span class="flabel" style="margin-top:0">Categorías</span>
+    <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-gcats" style="flex:1">Gastos (${gastoCats().length})</button><button type="button" class="ghost" id="c-icats" style="flex:1">Ingresos (${S.cfg.trabajos.length})</button></div>
     <span class="flabel" style="margin-top:22px">Dólar BNA divisa venta</span>
     <p class="hint" style="margin-top:0">${S.cotiz&&S.cotiz.ultima ? "Última: "+money(S.cotiz.ultima.venta)+" del "+fechaCorta(S.cotiz.ultima.fecha)+(S.cotiz.ultima.manual?" (cargada a mano).":".") : "Todavía no hay cotización cargada."} Se actualiza sola los días hábiles a la tarde. Si hace falta, cargá la de hoy a mano:</p>
     <div class="addrow" style="margin-top:8px"><input class="field num" id="c-cot" inputmode="decimal" placeholder="Ej: 1.529,50" aria-label="Cotización de hoy"><button type="button" id="c-cotok">Guardar</button></div>
@@ -1105,20 +1164,15 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Bitácora · versión 1</p>`,
+    <p class="hint" style="margin-top:14px">Bitácora · versión 2</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);
       if(!(v>0)){ toast("Ingresá una cotización válida."); return; }
       if(await saveCotizManual(v)){ closeSheet(); toast("Cotización guardada"); }
     });
-    sh.querySelector("#c-save").addEventListener("click",async()=>{
-      const jobs=sh.querySelector("#c-jobs").value.split(",").map(s=>s.trim()).filter(Boolean);
-      if(jobs.length) S.cfg.trabajos=[...new Set(jobs)];
-      const base=CATS.map(c=>c[0].toLowerCase());
-      S.cfg.catsExtra=[...new Set(sh.querySelector("#c-cats").value.split(",").map(x=>x.trim()).filter(x=>x&&!base.includes(x.toLowerCase())))];
-      await saveCfg(); closeSheet(); toast("Ajustes guardados");
-    });
+    sh.querySelector("#c-gcats").addEventListener("click",()=>sheetCats("gasto"));
+    sh.querySelector("#c-icats").addEventListener("click",()=>sheetCats("ingreso"));
     const csv=rows=>rows.map(r=>r.map(v=>{ v=v==null?"":String(v); return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(";")).join("\n");
     const save=(name,data)=>downloadFile(name,"\ufeff"+data,"text/csv;charset=utf-8").catch(()=>toast("No se pudo exportar."));
     sh.querySelector("#c-bak").addEventListener("click",()=>downloadFile("bitacora-respaldo-"+todayISO()+".json",backupJson(),"application/json").catch(()=>toast("No se pudo exportar.")));
@@ -1137,9 +1191,16 @@ function sheetCfg(){
 
 /* ---------- Eventos ---------- */
 document.getElementById("view").addEventListener("click",e=>{
+  if(S.setup){
+    const pk=e.target.closest("[data-pick] [data-chip]");
+    if(pk){ const id=pk.closest("[data-pick]").dataset.pick; pickToggle(S.setup[id],pk.dataset.chip); render(); return; }
+    const ad=e.target.closest("[data-addpick]");
+    if(ad){ const id=ad.dataset.addpick; pickAdd(S.setup[id],S.setup[id==="gasto"?"extraG":"extraI"],document.getElementById("add-"+id).value,id==="gasto"?SUG_GASTO:SUG_INGRESO); render(); return; }
+  }
   const b=e.target.closest("[data-act]"); if(!b) return;
   const a=b.dataset.act;
   if(a==="login"){ login(); return; }
+  if(a==="setupDone"){ setupDone(); return; }
   if(a==="retry"){ location.reload(); return; }
   if(a==="mes"){ S.month=shiftMonth(S.month,Number(b.dataset.n)); render(); }
   else if(a==="tab"){ setTab(b.dataset.tab); }
@@ -1160,6 +1221,12 @@ document.getElementById("tab-vehiculos").addEventListener("click",()=>setTab("ve
 document.getElementById("fab").addEventListener("click",()=>{ if(S.tab!=="vehiculos") return sheetMov(null); if(!vehIds().length) return sheetVeh(null); sheetServ(null); });
 document.getElementById("fab2").addEventListener("click",()=>sheetVeh(null));
 document.getElementById("btnCfg").addEventListener("click",sheetCfg);
+document.getElementById("view").addEventListener("keydown",e=>{
+  if(!S.setup||e.key!=="Enter"||!e.target.id||!e.target.id.startsWith("add-")) return;
+  e.preventDefault(); const id=e.target.id.slice(4);
+  pickAdd(S.setup[id],S.setup[id==="gasto"?"extraG":"extraI"],e.target.value,id==="gasto"?SUG_GASTO:SUG_INGRESO); render();
+  const i=document.getElementById(e.target.id); i&&i.focus();
+});
 
 { const hsh=location.hash.replace("#",""); if(hsh==="vehiculos"||hsh==="resumen") S.tab=hsh; }
 render();

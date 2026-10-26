@@ -268,7 +268,10 @@ html,body{overscroll-behavior-y:none}
 .medios button{border:0;background:none;border-radius:9px;padding:9px 2px;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:430px){.medios{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .medios.dos{grid-template-columns:repeat(2,minmax(0,1fr))}
-.medios button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.medios button[aria-pressed="true"]{background:var(--ink);color:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.need{animation:need .9s ease-out 1;border-radius:12px}
+@keyframes need{0%,60%{box-shadow:0 0 0 2px var(--neg)}100%{box-shadow:0 0 0 2px transparent}}
+@media (prefers-reduced-motion:reduce){.need{animation:none;box-shadow:0 0 0 2px var(--neg)}}
 .cuota-otra{width:84px;padding:8px 10px;border-radius:999px;text-align:center;font-size:15px}
 .cuota-otra.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
 .tarjnew{width:100%;display:grid;gap:4px}
@@ -298,6 +301,17 @@ h3.sec .linkbtn{letter-spacing:0;text-transform:none;font-size:14px}
 .fj-seg{display:grid;grid-template-columns:1fr 1fr;background:var(--chip);border-radius:10px;padding:3px;gap:3px;flex:none}
 .fj-seg button{border:0;background:none;border-radius:8px;padding:7px 10px;font-weight:600;font-size:13px}
 .fj-seg button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.topbtns{display:flex;gap:8px}
+#btnSearch[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.srch{display:flex;gap:8px;align-items:center;margin-block:4px 14px}
+.srch-in{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:0 12px}
+.srch-in:focus-within{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.srch-in svg{width:18px;height:18px;color:var(--muted);flex:none}
+.srch-in input{flex:1;min-width:0;border:0;background:none;outline:none;padding:12px 0;font-size:16px}
+.srch-x{border:0;background:none;font-weight:600;color:var(--muted);padding:8px 4px}
+.srch-sum{margin:0 0 10px;font-size:14px;color:var(--muted)}
+.srch-sum b{color:var(--ink)}
+.clases button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink);box-shadow:none}
 .filebtn{display:flex;align-items:center;justify-content:center;cursor:pointer;text-align:center}
 </style>
 </head>
@@ -305,9 +319,12 @@ h3.sec .linkbtn{letter-spacing:0;text-transform:none;font-size:14px}
 <div class="wrap">
   <header class="top">
     <div class="brand">Libreta<small id="subtitle">Plata y vehículos</small></div>
+    <div class="topbtns"><button class="iconbtn" id="btnSearch" aria-label="Buscar movimientos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+    </button>
     <button class="iconbtn" id="btnCfg" aria-label="Ajustes">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-    </button>
+    </button></div>
   </header>
   <main id="view"></main>
 </div>
@@ -352,7 +369,7 @@ const SUG_INGRESO = ["Sueldo","Trabajo independiente","Changas","Alquileres","Ve
 const PRE_INGRESO = ["Sueldo","Otro"];
 
 /* ---------- Estado ---------- */
-const S = { movs:[], servs:[], compras:[], cfg:defaultCfg(), setup:null, mode:"boot", tab:"plata", month:todayISO().slice(0,7), res:"gastos", cotiz:{hist:{}}, cotizBase:null, cotizMan:null, authErr:null, cur:"ARS" };
+const S = { movs:[], servs:[], compras:[], cfg:defaultCfg(), setup:null, mode:"boot", tab:"plata", month:todayISO().slice(0,7), res:"gastos", search:null, cotiz:{hist:{}}, cotizBase:null, cotizMan:null, authErr:null, cur:"ARS" };
 
 /* Categorías: las de fábrica + las que agregues, ordenadas por cuántas veces las usaste */
 function gastoCats(){ return Array.isArray(S.cfg.catsGasto) ? S.cfg.catsGasto : [...CATS.map(c=>c[0]), ...(S.cfg.catsExtra||[])]; }
@@ -839,7 +856,7 @@ function pendientes(v){
 /* ---------- Render ---------- */
 function render(){
   const gate = S.mode==="boot"||S.mode==="auth"||S.mode==="error"||(S.mode==="db"&&!!S.setup);
-  document.querySelector("nav.tabs").hidden=gate; document.getElementById("fab").hidden=gate; document.getElementById("btnCfg").hidden=gate; document.querySelector("header.top").hidden=gate;
+  document.querySelector("nav.tabs").hidden=gate; document.getElementById("fab").hidden=gate; document.getElementById("btnCfg").hidden=gate; document.getElementById("btnSearch").hidden=gate; document.querySelector("header.top").hidden=gate;
   if(gate){ document.getElementById("fab2").hidden=true; document.getElementById("view").innerHTML=renderGate(); return; }
   document.getElementById("tab-plata").setAttribute("aria-selected",S.tab==="plata");
   document.getElementById("tab-resumen").setAttribute("aria-selected",S.tab==="resumen");
@@ -847,6 +864,15 @@ function render(){
   document.getElementById("fabLabel").textContent = S.tab==="vehiculos" ? "Service" : "Cargar";
   const f2=document.getElementById("fab2"); f2.hidden = S.tab!=="vehiculos";
   if(!f2.hidden){ const w=document.getElementById("fab").offsetWidth; if(w) document.documentElement.style.setProperty("--fabw",w+"px"); }
+  document.getElementById("btnSearch").hidden = gate;
+  const searching = S.search!==null && S.search!==undefined && S.tab==="plata";
+  document.getElementById("btnSearch").setAttribute("aria-pressed", searching);
+  if(searching){
+    const had=document.activeElement && document.activeElement.id==="q", pos=had?document.activeElement.selectionStart:null;
+    document.getElementById("view").innerHTML = renderSearch();
+    if(had){ const q=document.getElementById("q"); q.focus(); try{ q.setSelectionRange(pos,pos); }catch(e){} }
+    return;
+  }
   document.getElementById("view").innerHTML = S.tab==="plata" ? renderPlata() : S.tab==="resumen" ? renderResumen() : renderVehiculos();
 }
 
@@ -884,12 +910,16 @@ function renderPlata(){
     return h;
   }
   const sorted=[...movs,...compras].sort((a,b)=> a.fecha===b.fecha ? (b.creado||0)-(a.creado||0) : (a.fecha<b.fecha?1:-1));
-  let last=""; h+=`<div class="list">`;
+  return h+listHtml(sorted);
+}
+function listHtml(sorted){
+  const anio=todayISO().slice(0,4);
+  let h="", last=""; h+=`<div class="list">`;
   sorted.forEach(m=>{
     if(m.fecha!==last){
       last=m.fecha;
       const tot=sorted.filter(x=>x.fecha===m.fecha&&x.tipo==="gasto"&&!x._compra).reduce((a,x)=>a+x.monto,0);
-      h+=`<div class="day"><span>${fechaLarga(m.fecha)}</span><span class="num">${tot?"−"+money(tot):""}</span></div>`;
+      h+=`<div class="day"><span>${fechaLarga(m.fecha)}${m.fecha.slice(0,4)!==anio?" "+m.fecha.slice(0,4):""}</span><span class="num">${tot?"−"+money(tot):""}</span></div>`;
     }
     if(m._compra){
       const n=m.cuotas||1, fm=v=>m.moneda==="USD"?usd(v):money(v), conf=(m.confirmadas||[]).length;
@@ -910,6 +940,49 @@ function renderPlata(){
   });
   return h+`</div>`;
 }
+
+/* ---------- Búsqueda ---------- */
+function norm(t){ return String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(); }
+function searchText(m){
+  const p=[m.cat,m.nota,m.clase];
+  if(m._compra){ p.push("credito","tarjeta",tarjNombre(m.tarjeta),"cuotas","gasto"); }
+  else{
+    p.push(m.tipo, m.medio?MEDIO_LBL[m.medio]:"", medioTxt(m));
+    if(m.medio==="credito") p.push("tarjeta");
+    if(isPend(m)) p.push("pendiente","por cobrar");
+    if(m.moneda==="USD") p.push("dolares","usd");
+  }
+  p.push(String(Math.round(m._compra?m.total:(m.moneda==="USD"?m.montoOrig:m.monto))));
+  return norm(p.filter(Boolean).join(" "));
+}
+function searchResults(q){
+  const terms=norm(q).split(/\s+/).filter(Boolean);
+  if(!terms.length) return null;
+  const all=[...S.movs, ...S.compras.map(c=>({...c,_compra:true,tipo:"gasto"}))];
+  return all.filter(m=>{ const t=searchText(m); return terms.every(w=>t.includes(w)); })
+    .sort((a,b)=> a.fecha===b.fecha ? (b.creado||0)-(a.creado||0) : (a.fecha<b.fecha?1:-1));
+}
+function renderSearchRes(){
+  const res=searchResults(S.search||"");
+  if(!res){
+    const sug=[...MEDIOS.map(x=>x[1]), ...catList("gasto").slice(0,6)];
+    return `<p class="hint">Buscá por nombre o nota, categoría, método de pago, tarjeta o billetera. Busca en todos los meses.</p>
+      <div class="chips" style="margin-top:12px">${sug.map(x=>`<button type="button" data-q="${esc(x)}">${esc(x)}</button>`).join("")}</div>`;
+  }
+  if(!res.length) return `<div class="empty" style="margin-top:12px"><b>Sin resultados para “${esc(S.search.trim())}”.</b>Probá con otra palabra o con menos palabras.</div>`;
+  const shown=res.slice(0,300);
+  const g=res.filter(m=>m.tipo==="gasto"&&!m._compra&&!isPend(m)).reduce((a,m)=>a+m.monto,0);
+  const i=res.filter(m=>m.tipo==="ingreso"&&!isPend(m)).reduce((a,m)=>a+m.monto,0);
+  return `<p class="srch-sum"><b>${res.length} resultado${res.length>1?"s":""}</b>${g?` · gastos <span class="num">${money(g)}</span>`:""}${i?` · ingresos <span class="num">${money(i)}</span>`:""}</p>`
+    + listHtml(shown) + (res.length>shown.length?`<p class="hint">Mostrando los ${shown.length} más recientes.</p>`:"");
+}
+function renderSearch(){
+  return `<div class="srch"><div class="srch-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+    <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Ej: YPF, Súper, débito, Visa" value="${esc(S.search||"")}" aria-label="Buscar movimientos"></div>
+    <button type="button" class="srch-x" data-act="closeSearch">Cerrar</button></div>
+    <div id="srch-res">${renderSearchRes()}</div>`;
+}
+function openSearch(){ S.search=""; S.tab="plata"; render(); window.scrollTo(0,0); const q=document.getElementById("q"); q&&q.focus(); }
 
 function renderVehiculos(){
   if(S.mode==="loading") return `<div class="empty" style="margin-top:14px">Cargando tus datos…</div>`;
@@ -1165,7 +1238,7 @@ function sheetMov(mov, compra){
   const editing=!!(mov||compra);
   let st;
   if(compra) st={id:compra.id,tipo:"gasto",fecha:compra.fecha,monto:compra.total,montoOrig:compra.moneda==="USD"?compra.total:null,cat:compra.cat,clase:compra.clase||null,nota:compra.nota||"",moneda:compra.moneda||"ARS",medio:"credito",tarjeta:compra.tarjeta,cuotas:compra.cuotas,creado:compra.creado};
-  else st = mov ? {...mov} : {id:uid(), tipo:"gasto", fecha:todayISO(), monto:null, cat:null, clase:null, nota:"", moneda:"ARS", medio:lsGet("medio")||null};
+  else st = mov ? {...mov} : {id:uid(), tipo:"gasto", fecha:todayISO(), monto:null, cat:null, clase:null, nota:"", moneda:"ARS", medio:null};
   if(st.tipo==="ingreso" && st.medio!=="efectivo" && st.medio!=="transferencia") st.medio = mov ? null : (lsGet("medio-ing")||"transferencia");
   st.moneda = st.moneda||"ARS";
   if(!st.cuotas) st.cuotas=1;
@@ -1349,12 +1422,16 @@ function sheetMov(mov, compra){
     fecha.addEventListener("change",()=>{ paintMoneda(); });
     pend.addEventListener("change",()=>{ paintPago(); paintMoneda(); });
     $("#f-clases").addEventListener("click",e=>{ const b=e.target.closest("[data-clase]"); if(!b) return; st.clase = st.clase===b.dataset.clase ? null : b.dataset.clase; paintClase(); });
-    $("#f-tipos").addEventListener("click",e=>{ const b=e.target.closest("[data-tipo]"); if(!b||b.dataset.tipo===st.tipo) return; st.tipo=b.dataset.tipo; st.cat=null; adding=false; fondoSel=undefined; st.medio = st.tipo==="gasto" ? (lsGet("medio")||null) : (lsGet("medio-ing")||"transferencia"); paint(); });
+    $("#f-tipos").addEventListener("click",e=>{ const b=e.target.closest("[data-tipo]"); if(!b||b.dataset.tipo===st.tipo) return; st.tipo=b.dataset.tipo; st.cat=null; adding=false; fondoSel=undefined; st.medio = st.tipo==="gasto" ? null : (lsGet("medio-ing")||"transferencia"); paint(); });
     if(!editing) setTimeout(()=>inp.focus(),60);
     $("#f-save").addEventListener("click",async()=>{
       const monto=parseMonto(inp.value);
       if(!(monto>0)){ err.textContent="Ingresá un monto mayor a cero."; inp.focus(); return; }
       if(!st.cat){ err.textContent= st.tipo==="gasto"?"Elegí una categoría.":"Elegí de qué trabajo viene."; return; }
+      const falta=(el,msg)=>{ err.textContent=msg; el.classList.remove("need"); void el.offsetWidth; el.classList.add("need"); el.scrollIntoView({block:"center",behavior:"smooth"}); };
+      if(st.tipo==="gasto" && !esCuota && !st.medio){ falta($("#f-medios"),"Elegí cómo pagaste."); return; }
+      if(st.tipo==="ingreso" && !st.medio){ falta($("#f-medios"),"Elegí cómo lo cobraste."); return; }
+      if(st.tipo==="gasto" && !st.clase){ falta($("#f-clases"),"Elegí si el gasto es Esencial, Innecesario, Inversión o Un gusto."); return; }
       const f=fecha.value||todayISO();
       const nota=$("#f-nota").value.trim();
       /* Compra con tarjeta de crédito: se guarda como compra y cada cuota se confirma al vencer */
@@ -1587,7 +1664,7 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 5</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 6</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);
@@ -1615,6 +1692,8 @@ function sheetCfg(){
 
 /* ---------- Eventos ---------- */
 document.getElementById("view").addEventListener("click",e=>{
+  const qb=e.target.closest("[data-q]");
+  if(qb){ S.search=qb.dataset.q; render(); const q=document.getElementById("q"); q&&q.focus(); return; }
   if(S.setup){
     const pk=e.target.closest("[data-pick] [data-chip]");
     if(pk){ const id=pk.closest("[data-pick]").dataset.pick; pickToggle(S.setup[id],pk.dataset.chip); render(); return; }
@@ -1631,6 +1710,7 @@ document.getElementById("view").addEventListener("click",e=>{
   else if(a==="res"){ S.res=b.dataset.res; render(); }
   else if(a==="cur"){ S.cur=b.dataset.cur; render(); }
   else if(a==="ajFijos"){ sheetFijos(); }
+  else if(a==="closeSearch"){ S.search=null; render(); }
   else if(a==="confCuotas"){ confirmarCuotas(b.dataset.key); }
   else if(a==="editCompra"){ const c=S.compras.find(x=>x.id===b.dataset.id); c&&sheetMov(null,c); }
   else if(a==="newFondo"){ sheetFondo(null); }
@@ -1643,13 +1723,18 @@ document.getElementById("view").addEventListener("click",e=>{
   else if(a==="km"){ sheetKm(b.dataset.v); }
   else if(a==="editVeh"){ sheetVeh(b.dataset.v); }
 });
-function setTab(t){ S.tab=t; render(); window.scrollTo(0,0); }
+function setTab(t){ S.tab=t; S.search=null; render(); window.scrollTo(0,0); }
 document.getElementById("tab-plata").addEventListener("click",()=>setTab("plata"));
 document.getElementById("tab-resumen").addEventListener("click",()=>setTab("resumen"));
 document.getElementById("tab-vehiculos").addEventListener("click",()=>setTab("vehiculos"));
 document.getElementById("fab").addEventListener("click",()=>{ if(S.tab!=="vehiculos") return sheetMov(null); if(!vehIds().length) return sheetVeh(null); sheetServ(null); });
 document.getElementById("fab2").addEventListener("click",()=>sheetVeh(null));
 document.getElementById("btnCfg").addEventListener("click",sheetCfg);
+document.getElementById("btnSearch").addEventListener("click",()=>{ if(S.search!==null && S.tab==="plata"){ S.search=null; render(); } else openSearch(); });
+document.getElementById("view").addEventListener("input",e=>{
+  if(e.target.id!=="q") return;
+  S.search=e.target.value; document.getElementById("srch-res").innerHTML=renderSearchRes();
+});
 document.getElementById("view").addEventListener("keydown",e=>{
   if(!S.setup||e.key!=="Enter"||!e.target.id||!e.target.id.startsWith("add-")) return;
   e.preventDefault(); const id=e.target.id.slice(4);

@@ -1,12 +1,13 @@
 {
   "fuente": "Banco de la Nación Argentina, Divisas, Dolar U.S.A",
   "ultima": {
-    "fecha": "2026-10-23",
-    "compra": 1520.5,
-    "venta": 1529.5,
-    "actualizado": "2026-10-25T13:55-03:00"
+    "fecha": "2026-10-26",
+    "compra": 1532.0,
+    "venta": 1541.0,
+    "actualizado": "2026-10-26T16:56-03:00"
   },
   "hist": {
-    "2026-10-23": 1529.5
+    "2026-10-23": 1529.5,
+    "2026-10-26": 1541.0
   }
 }

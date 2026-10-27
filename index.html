@@ -883,7 +883,7 @@ function renderPlata(){
   const gas=movs.filter(m=>m.tipo==="gasto"&&!isPend(m)).reduce((a,m)=>a+m.monto,0);
   const saldo=ing-gas;
   let h=`<div class="monthbar"><button data-act="mes" data-n="-1" aria-label="Mes anterior">‹</button><h2>${monthLabel(ym)}</h2><button data-act="mes" data-n="1" aria-label="Mes siguiente">›</button></div>`;
-  h+=`<div class="balance"><div><div class="lab">Saldo del mes</div><div class="big num">${saldo<0?"−":""}${money(Math.abs(saldo))}</div>${latestRate()&&(ing||gas)?`<div class="usd num">≈ ${saldo<0?"−":""}${usd(Math.abs(saldo)/latestRate())} al BNA divisa venta</div>`:""}</div>
+  h+=`<div class="balance"><div><div class="lab">Saldo del mes</div><div class="big num">${saldo<0?"−":""}${money(Math.abs(saldo))}</div>${latestRate()&&(ing||gas)?`<div class="usd num">≈ ${saldo<0?"−":""}${usd(Math.abs(saldo)/latestRate())} al dólar MEP</div>`:""}</div>
       <div class="row"><div><span class="lab"><i class="dotp" style="background:var(--pos)"></i>Ingresos</span><b class="num">${money(ing)}</b></div>
       <div><span class="lab"><i class="dotp" style="background:var(--neg)"></i>Gastos</span><b class="num">${money(gas)}</b></div></div></div>`;
   if(S.mode!=="loading") h+=renderFondos();
@@ -1063,7 +1063,7 @@ function renderResumen(){
   let h=`<div class="monthbar"><button data-act="mes" data-n="-1" aria-label="Mes anterior">‹</button><h2>${monthLabel(ym)}</h2><button data-act="mes" data-n="1" aria-label="Mes siguiente">›</button></div>
     <div class="seg" id="res-seg"><button type="button" data-act="res" data-res="gastos" aria-pressed="${S.res==="gastos"}">Gastos</button><button type="button" data-act="res" data-res="ingresos" aria-pressed="${S.res==="ingresos"}">Ingresos</button></div>
     <div class="curtog"><span>Ver en</span><button type="button" data-act="cur" data-cur="ARS" aria-pressed="${S.cur==="ARS"}">Pesos</button><button type="button" data-act="cur" data-cur="USD" aria-pressed="${S.cur==="USD"}">Dólares</button></div>`;
-  if(S.cur==="USD" && !Object.keys((S.cotiz&&S.cotiz.hist)||{}).length) return h+`<div class="empty"><b>Todavía no hay cotización cargada.</b>Para ver el resumen en dólares hace falta al menos una cotización BNA. Se carga sola los días hábiles, o podés ponerla a mano en Ajustes.</div>`;
+  if(S.cur==="USD" && !Object.keys((S.cotiz&&S.cotiz.hist)||{}).length) return h+`<div class="empty"><b>Todavía no hay cotización cargada.</b>Para ver el resumen en dólares hace falta al menos una cotización del dólar MEP. Se carga sola los días hábiles, o podés ponerla a mano en Ajustes.</div>`;
   if(S.mode==="loading") return h+`<div class="empty">Cargando tus datos…</div>`;
   const gastos=monthMovs(ym,"gasto"), ingresos=monthMovs(ym,"ingreso");
   const G=total(gastos), I=total(ingresos);
@@ -1303,7 +1303,7 @@ function sheetMov(mov, compra){
       if(st.moneda!=="USD") return;
       const tc=parseMonto(tcIn.value), m=parseMonto(inp.value);
       const r=rateInfo(fecha.value||todayISO());
-      let t = tcTocado ? "Cotización cargada a mano." : r ? "BNA divisa venta del "+fechaCorta(r.fecha)+"." : lastUsedTc() ? "La última que usaste. Todavía no hay cotización BNA cargada." : "Cargá la cotización del día.";
+      let t = tcTocado ? "Cotización cargada a mano." : r ? "Dólar MEP del "+fechaCorta(r.fecha)+"." : lastUsedTc() ? "La última que usaste. Todavía no hay cotización MEP cargada." : "Cargá la cotización del día.";
       if(tc>0 && m>0) t+=" Equivale a "+money(m*tc)+".";
       $("#f-tc-hint").textContent=t;
     };
@@ -1502,7 +1502,7 @@ function sheetCobro(m){
     const $=q=>sh.querySelector(q); let tocado=false;
     const fill=()=>{ if(!tocado){ const r=rateInfo($("#c-fecha").value||hoy); const v=r?r.v:lastUsedTc(); $("#c-tc").value=v?String(v).replace(".",","):""; } hint(); };
     const hint=()=>{ const r=rateInfo($("#c-fecha").value||hoy), tc=parseMonto($("#c-tc").value), u=parseMonto($("#c-monto").value);
-      $("#c-hint").textContent=(tocado?"Cotización cargada a mano.":r?"BNA divisa venta del "+fechaCorta(r.fecha)+".":"Cargá la cotización del día.")+(tc>0&&u>0?" Equivale a "+money(u*tc)+".":""); };
+      $("#c-hint").textContent=(tocado?"Cotización cargada a mano.":r?"Dólar MEP del "+fechaCorta(r.fecha)+".":"Cargá la cotización del día.")+(tc>0&&u>0?" Equivale a "+money(u*tc)+".":""); };
     fill();
     $("#c-fecha").addEventListener("change",fill);
     $("#c-tc").addEventListener("input",()=>{ tocado=true; hint(); });
@@ -1654,7 +1654,7 @@ function sheetCfg(){
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-gcats" style="flex:1">Gastos (${gastoCats().length})</button><button type="button" class="ghost" id="c-icats" style="flex:1">Ingresos (${S.cfg.trabajos.length})</button></div>
     <span class="flabel" style="margin-top:22px">Tarjetas de crédito</span>
     <div class="chips" id="c-tarjs">${tarjIds().map(id=>`<button type="button" data-tj="${esc(id)}">${esc(tarjNombre(id))}</button>`).join("")}<button type="button" class="addchip" data-tj="">+ Nueva tarjeta</button></div>
-    <span class="flabel" style="margin-top:22px">Dólar BNA divisa venta</span>
+    <span class="flabel" style="margin-top:22px">Dólar MEP</span>
     <p class="hint" style="margin-top:0">${S.cotiz&&S.cotiz.ultima ? "Última: "+money(S.cotiz.ultima.venta)+" del "+fechaCorta(S.cotiz.ultima.fecha)+(S.cotiz.ultima.manual?" (cargada a mano).":".") : "Todavía no hay cotización cargada."} Se actualiza sola los días hábiles a la tarde. Si hace falta, cargá la de hoy a mano:</p>
     <div class="addrow" style="margin-top:8px"><input class="field num" id="c-cot" inputmode="decimal" placeholder="Ej: 1.529,50" aria-label="Cotización de hoy"><button type="button" id="c-cotok">Guardar</button></div>
     <span class="flabel" style="margin-top:22px">Tus datos</span>
@@ -1664,7 +1664,7 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 6</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 7</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);

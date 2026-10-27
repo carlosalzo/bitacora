@@ -26,9 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Leer cotización BNA divisa
+      - name: Leer dólar MEP
         if: github.event_name != 'push'
-        run: python3 scripts/cotizacion_bna.py
+        run: python3 scripts/cotizacion_mep.py
 
       - name: Guardar cotización
         if: github.event_name != 'push'
@@ -37,7 +37,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add cotiz.json
-          git commit -m "Cotización BNA $(python3 -c 'import json;print(json.load(open("cotiz.json"))["ultima"]["fecha"])')"
+          git commit -m "Dólar MEP $(python3 -c 'import json;print(json.load(open("cotiz.json"))["ultima"]["fecha"])')"
           git push
 
       - uses: actions/configure-pages@v5

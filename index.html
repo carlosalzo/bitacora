@@ -982,7 +982,8 @@ function renderSearch(){
     <button type="button" class="srch-x" data-act="closeSearch">Cerrar</button></div>
     <div id="srch-res">${renderSearchRes()}</div>`;
 }
-function openSearch(){ S.search=""; S.tab="plata"; render(); window.scrollTo(0,0); const q=document.getElementById("q"); q&&q.focus(); }
+function closeSearch(){ if(S.search===null) return; S.search=null; dropLayers(["search"]); render(); }
+function openSearch(){ if(S.search===null) pushLayer("search"); if(S.tab!=="plata") dropLayers(["tab"]); S.search=""; S.tab="plata"; render(); window.scrollTo(0,0); const q=document.getElementById("q"); q&&q.focus(); }
 
 function renderVehiculos(){
   if(S.mode==="loading") return `<div class="empty" style="margin-top:14px">Cargando tus datos…</div>`;
@@ -1212,14 +1213,34 @@ function sheetFijos(){
 }
 
 /* ---------- Hojas ---------- */
+/* ---------- Botón Atrás del celu: cierra lo abierto en vez de salir de la app ---------- */
+let LAYERS=[], IGNORE_POP=0;
+function pushLayer(k){ LAYERS.push(k); try{ history.pushState({libreta:LAYERS.length},""); }catch(e){} }
+function dropLayers(kinds){
+  let n=0; while(LAYERS.length && kinds.includes(LAYERS[LAYERS.length-1])){ LAYERS.pop(); n++; }
+  LAYERS=LAYERS.filter(k=>!kinds.includes(k));
+  if(n){ IGNORE_POP++; try{ history.go(-n); }catch(e){ IGNORE_POP--; } }
+}
+window.addEventListener("popstate",()=>{
+  if(IGNORE_POP>0){ IGNORE_POP--; return; }
+  const k=LAYERS.pop();
+  if(k==="sheet") closeSheet(true);
+  else if(k==="search"){ S.search=null; render(); }
+  else if(k==="tab"){ S.search=null; S.tab="plata"; render(); window.scrollTo(0,0); }
+});
 function openSheet(html,onMount){
   const root=document.getElementById("sheetRoot");
+  if(!root.firstElementChild) pushLayer("sheet");
   root.innerHTML=`<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div></div>`;
   const scrim=root.firstElementChild;
   scrim.addEventListener("click",e=>{ if(e.target===scrim) closeSheet(); });
   onMount && onMount(scrim.querySelector(".sheet"));
 }
-function closeSheet(){ document.getElementById("sheetRoot").innerHTML=""; }
+function closeSheet(fromBack){
+  const root=document.getElementById("sheetRoot"); const open=!!root.firstElementChild;
+  root.innerHTML="";
+  if(open && fromBack!==true) dropLayers(["sheet"]);
+}
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeSheet(); });
 
 function chipHtml(list,sel){ return list.map(c=>`<button type="button" data-chip="${esc(c)}" aria-pressed="${c===sel}">${esc(c)}</button>`).join(""); }
@@ -1664,7 +1685,7 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 7</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 8</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);
@@ -1710,7 +1731,7 @@ document.getElementById("view").addEventListener("click",e=>{
   else if(a==="res"){ S.res=b.dataset.res; render(); }
   else if(a==="cur"){ S.cur=b.dataset.cur; render(); }
   else if(a==="ajFijos"){ sheetFijos(); }
-  else if(a==="closeSearch"){ S.search=null; render(); }
+  else if(a==="closeSearch"){ closeSearch(); }
   else if(a==="confCuotas"){ confirmarCuotas(b.dataset.key); }
   else if(a==="editCompra"){ const c=S.compras.find(x=>x.id===b.dataset.id); c&&sheetMov(null,c); }
   else if(a==="newFondo"){ sheetFondo(null); }
@@ -1723,14 +1744,21 @@ document.getElementById("view").addEventListener("click",e=>{
   else if(a==="km"){ sheetKm(b.dataset.v); }
   else if(a==="editVeh"){ sheetVeh(b.dataset.v); }
 });
-function setTab(t){ S.tab=t; S.search=null; render(); window.scrollTo(0,0); }
+function setTab(t){
+  if(t===S.tab && S.search===null) return;
+  const drop=[]; if(S.search!==null) drop.push("search");
+  if(t==="plata") drop.push("tab");
+  if(drop.length) dropLayers(drop);
+  if(t!=="plata" && !LAYERS.includes("tab")) pushLayer("tab");
+  S.tab=t; S.search=null; render(); window.scrollTo(0,0);
+}
 document.getElementById("tab-plata").addEventListener("click",()=>setTab("plata"));
 document.getElementById("tab-resumen").addEventListener("click",()=>setTab("resumen"));
 document.getElementById("tab-vehiculos").addEventListener("click",()=>setTab("vehiculos"));
 document.getElementById("fab").addEventListener("click",()=>{ if(S.tab!=="vehiculos") return sheetMov(null); if(!vehIds().length) return sheetVeh(null); sheetServ(null); });
 document.getElementById("fab2").addEventListener("click",()=>sheetVeh(null));
 document.getElementById("btnCfg").addEventListener("click",sheetCfg);
-document.getElementById("btnSearch").addEventListener("click",()=>{ if(S.search!==null && S.tab==="plata"){ S.search=null; render(); } else openSearch(); });
+document.getElementById("btnSearch").addEventListener("click",()=>{ if(S.search!==null && S.tab==="plata") closeSearch(); else openSearch(); });
 document.getElementById("view").addEventListener("input",e=>{
   if(e.target.id!=="q") return;
   S.search=e.target.value; document.getElementById("srch-res").innerHTML=renderSearchRes();

@@ -1,8 +1,8 @@
 // Libreta: guarda la app en el celu para que abra sin señal.
 // Los datos los maneja Firestore aparte (tiene su propia caché), acá solo va la app.
-const CACHE = "libreta-v12";
+const CACHE = "libreta-v13";
 const APP = ["./", "index.html", "manifest.webmanifest", "cotiz.json",
-  "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png"];
+  "icons/icon-192-libreta.png", "icons/icon-512-libreta.png", "icons/maskable-512-libreta.png", "icons/apple-touch-icon-libreta.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(APP)).then(() => self.skipWaiting()));

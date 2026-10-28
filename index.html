@@ -312,6 +312,11 @@ h3.sec .linkbtn{letter-spacing:0;text-transform:none;font-size:14px}
 .srch-sum{margin:0 0 10px;font-size:14px;color:var(--muted)}
 .srch-sum b{color:var(--ink)}
 .clases button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink);box-shadow:none}
+.docs{border-top:1px solid var(--line);padding:4px 16px 8px}
+.docrow{width:100%;background:none;border:0;border-top:1px solid var(--line);text-align:left;cursor:pointer}
+.docs .docrow:first-child{border-top:0}
+.pill.none{background:var(--chip);color:var(--muted)}
+.flabel-note{text-transform:none;letter-spacing:0;font-weight:500;margin-left:6px}
 .filebtn{display:flex;align-items:center;justify-content:center;cursor:pointer;text-align:center}
 </style>
 </head>
@@ -358,7 +363,9 @@ const CAT_ABBR = Object.fromEntries(CATS);
 const CLASES = [["Esencial","var(--cl-es)"],["Innecesario","var(--cl-in)"],["Inversión","var(--cl-inv)"],["Un gusto","var(--cl-gu)"]];
 const CLASE_COL = Object.fromEntries(CLASES);
 const PAL = ["var(--c1)","var(--c2)","var(--c3)","var(--c4)","var(--c5)","var(--c6)"];
-const SERV_TIPOS = ["Cambio de aceite","Filtros","Service general","Cubiertas","Frenos","Cadena / correa","Batería","Otro"];
+const SERV_TIPOS = ["Cambio de aceite","Filtro de aceite","Filtro de aire","Transmisión: aceite y filtro","Agua","Service general","Cubiertas","Frenos","Cadena / correa","Batería","Filtros","Otro"];
+function servTipos(s){ return Array.isArray(s.tipos)&&s.tipos.length ? s.tipos : (s.tipo?[s.tipo]:[]); }
+function servLabel(s){ return servTipos(s).join(" · "); }
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
 const defaultCfg = () => ({ trabajos:["Sueldo","Otro"], catsExtra:[], vehiculos:{} });
@@ -384,7 +391,21 @@ function lastUsedTc(){ let b=null; S.movs.forEach(m=>{ if(m.tc && (!b||(m.creado
 function isPend(m){ return m.estado==="pendiente"; }
 function pendArs(m){ return m.moneda==="USD" ? m.montoOrig*(latestRate()||lastUsedTc()||0) : m.monto; }
 function usd(n){ return "US$ "+nf0.format(Math.round(n*100)/100); }
-const VEH_TIPOS=["Auto","Camioneta","Moto","Otro"];
+const VEH_TIPOS=["Auto","Camioneta","Utilitario","Camión","Moto","Otro"];
+const DOCS=[["vtv","VTV",[["12","+1 año"],["24","+2 años"]]],["matafuego","Matafuego",[["12","+1 año"]]]];
+function tieneDocs(v){ return vehTipo(v)!=="Moto"; }
+/* Estado de VTV y matafuego: vencido, próximo (30 días) o al día */
+function docsEstado(v){
+  const d=((S.cfg.vehiculos||{})[v]||{}).docs||{};
+  return DOCS.map(([k,nom])=>{
+    const x=d[k]||{};
+    if(!x.vence) return {k,nom,x,est:"none",txt:x.hecho?"Hecha el "+fechaCorta(x.hecho)+" · falta el vencimiento":"Sin cargar"};
+    const dd=diasHasta(x.vence);
+    const est = dd<0?"over":dd<=30?"soon":"ok";
+    const txt=(dd<0?"Venció hace "+(-dd)+(dd===-1?" día":" días"):dd===0?"Vence hoy":"Vence el "+fechaCorta(x.vence)+(dd<=30?" · faltan "+dd+" días":""))+(x.hecho?" · hecha el "+fechaCorta(x.hecho):"");
+    return {k,nom,x,est,txt,rank:{over:0,soon:1,ok:2}[est]};
+  });
+}
 function vehOrden(k){ const v=(S.cfg.vehiculos||{})[k]||{}; return v.orden ?? (k==="moto"?1:k==="auto"?2:99); }
 function vehIds(){ return Object.keys(S.cfg.vehiculos||{}).sort((a,b)=>(vehOrden(a)-vehOrden(b))||a.localeCompare(b)); }
 function vehTipo(id){ const x=(S.cfg.vehiculos||{})[id]||{}; return x.tipo || (id==="moto"?"Moto":id==="auto"?"Auto":"Otro"); }
@@ -835,11 +856,15 @@ function pendientes(v){
   const cur=vehKm(v);
   const porTipo={};
   S.servs.filter(s=>s.veh===v).forEach(s=>{
-    const p=porTipo[s.tipo];
-    if(!p || s.fecha>p.fecha || (s.fecha===p.fecha && (s.km||0)>(p.km||0))) porTipo[s.tipo]=s;
+    servTipos(s).forEach(t=>{ const p=porTipo[t];
+      if(!p || s.fecha>p.fecha || (s.fecha===p.fecha && (s.km||0)>(p.km||0))) porTipo[t]=s; });
   });
+  /* Un mismo service puede ser el último de varias etiquetas: se muestra una vez con esas etiquetas */
+  const porServ={};
+  Object.entries(porTipo).forEach(([t,s])=>{ (porServ[s.id]=porServ[s.id]||{s,tipos:[]}).tipos.push(t); });
   const mKm = margenKm(v);
-  return Object.values(porTipo).filter(s=>s.proxKm||s.proxFecha).map(s=>{
+  return Object.values(porServ).filter(({s})=>s.proxKm||s.proxFecha).map(({s,tipos})=>{
+    const label=servTipos(s).filter(t=>tipos.includes(t)).join(" · ");
     const kmRest = s.proxKm ? s.proxKm-cur : null;
     const dRest = s.proxFecha ? diasHasta(s.proxFecha) : null;
     let est="ok";
@@ -849,7 +874,7 @@ function pendientes(v){
     if(kmRest!==null) partes.push(kmRest<=0 ? "pasado por "+km(-kmRest)+" km" : "faltan "+km(kmRest)+" km");
     if(dRest!==null) partes.push(dRest<0 ? "venció hace "+(-dRest)+" días" : dRest===0 ? "vence hoy" : "faltan "+dRest+" días");
     const meta=[]; if(s.proxKm) meta.push("a los "+km(s.proxKm)+" km"); if(s.proxFecha) meta.push("el "+fechaCorta(s.proxFecha));
-    return {s,est,txt:partes.join(" · "),meta:meta.join(" o "),rank:{over:0,soon:1,ok:2}[est]};
+    return {s,label,est,txt:partes.join(" · "),meta:meta.join(" o "),rank:{over:0,soon:1,ok:2}[est]};
   }).sort((a,b)=>a.rank-b.rank);
 }
 
@@ -889,11 +914,14 @@ function renderPlata(){
   if(S.mode!=="loading") h+=renderFondos();
 
   // Avisos de vehículos
-  const avisos=[]; vehIds().forEach(v=>pendientes(v).forEach(p=>{ if(p.est!=="ok") avisos.push({v,p}); }));
+  const avisos=[]; vehIds().forEach(v=>{
+    pendientes(v).forEach(p=>{ if(p.est!=="ok") avisos.push({v,p}); });
+    if(tieneDocs(v)) docsEstado(v).forEach(d=>{ if(d.est==="over"||d.est==="soon") avisos.push({v,p:{label:d.nom,txt:d.txt,est:d.est,rank:d.rank}}); });
+  });
   if(avisos.length){
     const over=avisos.some(a=>a.p.est==="over");
     const a=avisos.sort((x,y)=>x.p.rank-y.p.rank)[0];
-    h+=`<button class="alert ${over?"bad":""}" data-act="tab" data-tab="vehiculos"><div><b>${esc(vehNombre(a.v))}: ${esc(a.p.s.tipo)}</b><span>${esc(a.p.txt)}${avisos.length>1?" · y "+(avisos.length-1)+" aviso"+(avisos.length>2?"s":"")+" más":""}</span></div><span class="go">›</span></button>`;
+    h+=`<button class="alert ${over?"bad":""}" data-act="tab" data-tab="vehiculos"><div><b>${esc(vehNombre(a.v))}: ${esc(a.p.label)}</b><span>${esc(a.p.txt)}${avisos.length>1?" · y "+(avisos.length-1)+" aviso"+(avisos.length>2?"s":"")+" más":""}</span></div><span class="go">›</span></button>`;
   }
 
   const pends=S.movs.filter(isPend).sort((a,b)=>(a.fechaEst||"9999")<(b.fechaEst||"9999")?-1:1);
@@ -994,16 +1022,19 @@ function renderVehiculos(){
     const servs=S.servs.filter(s=>s.veh===v).sort((a,b)=>a.fecha===b.fecha?(b.km||0)-(a.km||0):(a.fecha<b.fecha?1:-1));
     const pend=pendientes(v);
     const ultimo=servs[0];
-    let h=`<section class="veh"><div class="veh-h"><div><div class="nm">${esc(cfg.nombre)}</div><div class="odo num">${cur?km(cur):"—"}<small>km</small></div><div class="odo-sub">${ultimo?"Último service: "+esc(ultimo.tipo)+" el "+fechaCorta(ultimo.fecha):"Sin services cargados"}</div></div><div class="acts"><button class="btn-s" data-act="km" data-v="${v}">Actualizar km</button><button class="linkbtn" data-act="editVeh" data-v="${v}">Editar</button></div></div>`;
+    let h=`<section class="veh"><div class="veh-h"><div><div class="nm">${esc(cfg.nombre)}</div><div class="odo num">${cur?km(cur):"—"}<small>km</small></div><div class="odo-sub">${ultimo?"Último service: "+esc(servLabel(ultimo))+" el "+fechaCorta(ultimo.fecha):"Sin services cargados"}</div></div><div class="acts"><button class="btn-s" data-act="km" data-v="${v}">Actualizar km</button><button class="linkbtn" data-act="editVeh" data-v="${v}">Editar</button></div></div>`;
     if(pend.length){
-      h+=`<div class="pend">`+pend.map(p=>`<div class="pitem"><div class="t"><b>${esc(p.s.tipo)}</b><span>${esc(p.txt)}${p.meta?" · "+esc(p.meta):""}</span></div><span class="pill ${p.est}">${{ok:"Al día",soon:"Próximo",over:"Vencido"}[p.est]}</span></div>`).join("")+`</div>`;
+      h+=`<div class="pend">`+pend.map(p=>`<div class="pitem"><div class="t"><b>${esc(p.label)}</b><span>${esc(p.txt)}${p.meta?" · "+esc(p.meta):""}</span></div><span class="pill ${p.est}">${{ok:"Al día",soon:"Próximo",over:"Vencido"}[p.est]}</span></div>`).join("")+`</div>`;
+    }
+    if(tieneDocs(v)){
+      h+=`<div class="docs">`+docsEstado(v).map(d=>`<button class="pitem docrow" data-act="doc" data-v="${esc(v)}" data-doc="${d.k}"><div class="t"><b>${d.nom}</b><span>${esc(d.txt)}</span></div>${d.est==="none"?`<span class="pill none">Cargar</span>`:`<span class="pill ${d.est}">${{ok:"Al día",soon:"Próxima",over:"Vencida"}[d.est]}</span>`}</button>`).join("")+`</div>`;
     }
     if(servs.length){
-      h+=`<details class="hist"><summary>Historial (${servs.length})</summary>`+servs.map(s=>`<button class="hrow" data-act="editServ" data-id="${esc(s.id)}"><span class="d num">${fechaCorta(s.fecha)}</span><span class="t"><b>${esc(s.tipo)}</b>${s.detalle?`<span>${esc(s.detalle)}</span>`:""}${s.costo?`<span class="num">${money(s.costo)}</span>`:""}</span><span class="k num">${s.km?km(s.km)+" km":""}</span></button>`).join("")+`</details>`;
+      h+=`<details class="hist"><summary>Historial (${servs.length})</summary>`+servs.map(s=>`<button class="hrow" data-act="editServ" data-id="${esc(s.id)}"><span class="d num">${fechaCorta(s.fecha)}</span><span class="t"><b>${esc(servLabel(s))}</b>${s.detalle?`<span>${esc(s.detalle)}</span>`:""}${s.costo?`<span class="num">${money(s.costo)}</span>`:""}</span><span class="k num">${s.km?km(s.km)+" km":""}</span></button>`).join("")+`</details>`;
     }
     h+=`<div class="veh-foot"><button class="btn-s" data-act="newServ" data-v="${v}">+ Registrar service de ${esc(cfg.nombre.toLowerCase())}</button></div></section>`;
     return h;
-  }).join("") + `<p class="hint" style="margin-top:14px">Los avisos salen del próximo service que cargues en cada registro (por kilómetros, por fecha o ambos). Se marcan como “Próximo” a 30 días, o a ${km(500)} km en motos y ${km(1000)} km en el resto.</p>`;
+  }).join("") + `<p class="hint" style="margin-top:14px">Los avisos salen del próximo service que cargues en cada registro (por kilómetros, por fecha o ambos). Se marcan como “Próximo” a 30 días, o a ${km(500)} km en motos y ${km(1000)} km en el resto. La VTV y el matafuego avisan 30 días antes de vencer.</p>`;
 }
 
 /* ---------- Resumen ---------- */
@@ -1541,8 +1572,10 @@ function sheetCobro(m){
 
 function sheetServ(serv,vehDefault){
   const editing=!!serv;
-  const st = serv ? {...serv} : {id:uid(), veh:vehDefault||vehIds()[0], fecha:todayISO(), km:null, tipo:null, detalle:"", costo:null, proxKm:null, proxFecha:null};
+  const st = serv ? {...serv} : {id:uid(), veh:vehDefault||vehIds()[0], fecha:todayISO(), km:null, tipos:[], detalle:"", costo:null, proxKm:null, proxFecha:null};
   const linked = st.movId ? S.movs.find(m=>m.id===st.movId) : null;
+  st.tipos=[...servTipos(st)];
+  const tiposLista=[...new Set([...SERV_TIPOS,...st.tipos])];
   const vn=v=>esc(vehNombre(v));
   const vids=vehIds(); if(st.veh && !vids.includes(st.veh)) vids.push(st.veh);
   openSheet(`
@@ -1552,8 +1585,8 @@ function sheetServ(serv,vehDefault){
       <div><label class="flabel" for="s-fecha" style="margin-top:0">Fecha</label><input class="field" type="date" id="s-fecha" value="${st.fecha}"></div>
       <div><label class="flabel" for="s-km" style="margin-top:0">Kilómetros</label><input class="field num" id="s-km" inputmode="numeric" placeholder="" value="${st.km?km(st.km):""}"></div>
     </div>
-    <span class="flabel">Qué se hizo</span>
-    <div class="chips" id="s-tipos">${chipHtml(SERV_TIPOS,st.tipo)}</div>
+    <span class="flabel">Qué se hizo <span class="flabel-note">podés marcar varias</span></span>
+    <div class="chips pick" id="s-tipos"></div>
     <label class="flabel" for="s-det">Detalle del service</label>
     <textarea class="field" id="s-det" maxlength="400" placeholder="Ej: aceite 10W40 sintético, filtro de aceite y de aire. Taller de Pico.">${esc(st.detalle||"")}</textarea>
     <span class="flabel">Próximo service</span>
@@ -1572,7 +1605,9 @@ function sheetServ(serv,vehDefault){
     const paintVeh=()=>sh.querySelectorAll("[data-veh]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.veh===st.veh));
     paintVeh();
     sh.querySelector("#s-vehs").addEventListener("click",e=>{ const b=e.target.closest("[data-veh]"); if(b){ st.veh=b.dataset.veh; paintVeh(); }});
-    wireChips(sh.querySelector("#s-tipos"),t=>st.tipo=t);
+    const paintTipos=()=>{ sh.querySelector("#s-tipos").innerHTML=tiposLista.map(t=>{ const on=st.tipos.includes(t); return `<button type="button" data-chip="${esc(t)}" aria-pressed="${on}">${on?"✓ ":""}${esc(t)}</button>`; }).join(""); };
+    paintTipos();
+    sh.querySelector("#s-tipos").addEventListener("click",e=>{ const b=e.target.closest("[data-chip]"); if(!b) return; const t=b.dataset.chip; st.tipos = st.tipos.includes(t) ? st.tipos.filter(x=>x!==t) : [...st.tipos,t]; paintTipos(); });
     const kmIn=sh.querySelector("#s-km"), pkm=sh.querySelector("#s-pkm"), pf=sh.querySelector("#s-pfecha");
     if(!editing){ const c=vehKm(st.veh); kmIn.placeholder = c? "Último: "+km(c) : "Ej: 45.200"; }
     [kmIn,pkm].forEach(i=>i.addEventListener("input",()=>{ const n=parseKm(i.value); i.value=n?km(n):""; }));
@@ -1583,11 +1618,12 @@ function sheetServ(serv,vehDefault){
       pf.value=addMonths(sh.querySelector("#s-fecha").value||todayISO(),Number(b.dataset.m)); });
     sh.querySelector("#s-save").addEventListener("click",async()=>{
       const err=sh.querySelector("#s-err");
-      if(!st.tipo){ err.textContent="Elegí qué se hizo."; return; }
+      if(!st.tipos.length){ err.textContent="Elegí al menos una cosa que se hizo."; return; }
+      const tiposOrd=tiposLista.filter(t=>st.tipos.includes(t));
       const kmv=parseKm(kmIn.value);
       const costo=parseMonto(sh.querySelector("#s-costo").value);
       const fecha=sh.querySelector("#s-fecha").value||todayISO();
-      const obj={id:st.id,veh:st.veh,fecha,km:kmv||null,tipo:st.tipo,detalle:sh.querySelector("#s-det").value.trim(),
+      const obj={id:st.id,veh:st.veh,fecha,km:kmv||null,tipos:tiposOrd,tipo:tiposOrd[0],detalle:sh.querySelector("#s-det").value.trim(),
         costo:costo>0?costo:null,proxKm:parseKm(pkm.value)||null,proxFecha:pf.value||null,creado:st.creado||Date.now()};
       if(obj.proxKm && kmv && obj.proxKm<=kmv){ err.textContent="El próximo service tiene que ser después de los km actuales."; return; }
       const asGasto=sh.querySelector("#s-asgasto").checked;
@@ -1595,7 +1631,7 @@ function sheetServ(serv,vehDefault){
         if(asGasto && obj.costo){
           const mid=st.movId||uid();
           obj.movId=mid;
-          await put("movs",{id:mid,tipo:"gasto",fecha,monto:obj.costo,cat:"Vehículo",clase:"Esencial",nota:obj.tipo+" · "+vehNombre(st.veh),servId:obj.id,creado:(linked&&linked.creado)||Date.now()});
+          await put("movs",{id:mid,tipo:"gasto",fecha,monto:obj.costo,cat:"Vehículo",clase:"Esencial",nota:tiposOrd.join(", ")+" · "+vehNombre(st.veh),servId:obj.id,creado:(linked&&linked.creado)||Date.now()});
         }else if(st.movId){ await del("movs",st.movId).catch(()=>{}); }
         await put("servs",obj);
         if(kmv && S.cfg.vehiculos[st.veh] && kmv>(S.cfg.vehiculos[st.veh].km||0)){ S.cfg.vehiculos[st.veh].km=kmv; await saveCfg(); }
@@ -1608,6 +1644,31 @@ function sheetServ(serv,vehDefault){
   });
 }
 
+function sheetDoc(v,k){
+  const [,nom,quick]=DOCS.find(d=>d[0]===k);
+  const veh=S.cfg.vehiculos[v]; const x=((veh.docs||{})[k])||{};
+  openSheet(`<h4>${nom} · ${esc(veh.nombre)}</h4>
+    <div class="grid2">
+      <div><label class="flabel" for="d-hecho" style="margin-top:0">${k==="vtv"?"Fecha en que la hiciste":"Fecha de carga o compra"}</label><input class="field" type="date" id="d-hecho" value="${x.hecho||""}"></div>
+      <div><label class="flabel" for="d-vence" style="margin-top:0">Vencimiento</label><input class="field" type="date" id="d-vence" value="${x.vence||""}">
+        <div class="quick" id="d-q">${quick.map(([m,l])=>`<button type="button" data-m="${m}">${l}</button>`).join("")}</div></div>
+    </div>
+    <p class="hint">Te aviso en Plata 30 días antes de que venza. Los atajos calculan el vencimiento desde la fecha de realización.</p>
+    <div class="err" id="d-err"></div>
+    <div class="actions">${x.vence||x.hecho?`<button type="button" class="ghost danger" id="d-del">Borrar</button>`:""}<button type="button" class="primary" id="d-ok">Guardar</button></div>`,
+  sh=>{
+    const $=q=>sh.querySelector(q);
+    $("#d-q").addEventListener("click",e=>{ const b=e.target.closest("[data-m]"); if(!b) return; $("#d-vence").value=addMonths($("#d-hecho").value||todayISO(),Number(b.dataset.m)); });
+    const guardar=async docs=>{ S.cfg.vehiculos={...S.cfg.vehiculos,[v]:{...S.cfg.vehiculos[v],docs}}; await saveCfg(); };
+    $("#d-ok").addEventListener("click",async()=>{
+      const hecho=$("#d-hecho").value||null, vence=$("#d-vence").value||null;
+      if(!vence){ $("#d-err").textContent="Poné la fecha de vencimiento."; return; }
+      if(hecho && vence<=hecho){ $("#d-err").textContent="El vencimiento tiene que ser después de la fecha de realización."; return; }
+      await guardar({...(veh.docs||{}),[k]:{hecho,vence}}); closeSheet(); toast(nom+" guardado");
+    });
+    const d=$("#d-del"); d&&wireDelete(d,async()=>{ const docs={...(veh.docs||{})}; delete docs[k]; await guardar(docs); closeSheet(); toast(nom+" borrado"); });
+  });
+}
 function sheetKm(v){
   const cur=vehKm(v);
   openSheet(`<h4>Kilómetros de ${esc(S.cfg.vehiculos[v].nombre.toLowerCase())}</h4>
@@ -1685,7 +1746,7 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 8</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 9</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);
@@ -1707,7 +1768,7 @@ function sheetCfg(){
     });
     const bm=sh.querySelector("#c-csv-m"), bs=sh.querySelector("#c-csv-s");
     bm && bm.addEventListener("click",()=>save("movimientos.csv",csv([["Fecha","Tipo","Categoría/Trabajo","Clase","Monto ARS","Nota","Moneda","Monto USD","Cotización","Estado","Medio de pago","Tarjeta/Billetera"],...[...S.movs].sort((a,b)=>a.fecha<b.fecha?-1:1).map(m=>[m.fecha,m.tipo,m.cat,m.clase||"",String(m.monto).replace(".",","),m.nota,m.moneda||"ARS",m.montoOrig?String(m.montoOrig).replace(".",","):"",m.tc?String(m.tc).replace(".",","):"",m.estado||"cobrado",m.medio?MEDIO_LBL[m.medio]:"",m.medio==="credito"?tarjNombre(m.tarjeta):(m.fondo?fondoNombre(m.fondo):"")])])));
-    bs && bs.addEventListener("click",()=>save("services.csv",csv([["Vehículo","Fecha","Km","Tipo","Detalle","Costo","Próximo km","Próxima fecha"],...[...S.servs].sort((a,b)=>a.fecha<b.fecha?-1:1).map(s=>[vehNombre(s.veh),s.fecha,s.km,s.tipo,s.detalle,s.costo,s.proxKm,s.proxFecha])])));
+    bs && bs.addEventListener("click",()=>save("services.csv",csv([["Vehículo","Fecha","Km","Tipo","Detalle","Costo","Próximo km","Próxima fecha"],...[...S.servs].sort((a,b)=>a.fecha<b.fecha?-1:1).map(s=>[vehNombre(s.veh),s.fecha,s.km,servLabel(s),s.detalle,s.costo,s.proxKm,s.proxFecha])])));
   });
 }
 
@@ -1743,6 +1804,7 @@ document.getElementById("view").addEventListener("click",e=>{
   else if(a==="newServ"){ sheetServ(null,b.dataset.v); }
   else if(a==="km"){ sheetKm(b.dataset.v); }
   else if(a==="editVeh"){ sheetVeh(b.dataset.v); }
+  else if(a==="doc"){ sheetDoc(b.dataset.v,b.dataset.doc); }
 });
 function setTab(t){
   if(t===S.tab && S.search===null) return;

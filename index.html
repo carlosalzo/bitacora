@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <title>Libreta</title>
 <meta name="description" content="Gastos, ingresos y services de vehículos">
 <link rel="manifest" href="manifest.webmanifest">
@@ -381,6 +381,30 @@ nav.tabs .in{grid-template-columns:repeat(4,minmax(0,1fr))}
 .tots b{font-family:var(--f-display);font-weight:600;font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tots .in{background:var(--pos-bg)} .tots .in span,.tots .in b{color:var(--pos)}
 .tots .out{background:var(--neg-bg)} .tots .out span,.tots .out b{color:var(--neg)}
+
+/* ---------- Ajustes: barra flotante tipo "vidrio", buscador abajo, Gasto en rojo ---------- */
+:root{--glass:rgba(255,255,255,.72);--glass-edge:rgba(26,31,27,.08);--glass-sel:rgba(26,31,27,.07);--glass-shadow:0 8px 28px rgba(26,31,27,.14)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--glass:rgba(34,39,34,.72);--glass-edge:rgba(255,255,255,.08);--glass-sel:rgba(255,255,255,.10);--glass-shadow:0 8px 28px rgba(0,0,0,.5)}}
+:root[data-theme="dark"]{--glass:rgba(34,39,34,.72);--glass-edge:rgba(255,255,255,.08);--glass-sel:rgba(255,255,255,.10);--glass-shadow:0 8px 28px rgba(0,0,0,.5)}
+nav.tabs{left:50%;right:auto;transform:translateX(-50%);width:min(calc(100% - 24px),520px);bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  padding:6px;border:1px solid var(--glass-edge);border-radius:32px;background:var(--glass);box-shadow:var(--glass-shadow);
+  -webkit-backdrop-filter:blur(20px) saturate(1.8);backdrop-filter:blur(20px) saturate(1.8)}
+nav.tabs .in{gap:4px}
+nav.tabs button{height:56px;padding:0;border-radius:26px;align-content:center;gap:2px;font-size:11px;letter-spacing:0;transition:background-color .2s ease,color .2s ease}
+nav.tabs button[aria-selected="true"]{background:var(--glass-sel)}
+@media (prefers-reduced-motion:reduce){nav.tabs button{transition:none}}
+.fab{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+.quick .main .qi{background:var(--neg);border-color:var(--neg);color:var(--bg)}
+/* Buscador abajo, al alcance del pulgar (como en Ajustes de Samsung) */
+.srchdock{position:fixed;z-index:19;left:50%;transform:translateX(-50%);width:min(calc(100% - 24px),520px);bottom:calc(92px + env(safe-area-inset-bottom,0px));
+  display:flex;align-items:center;gap:8px;height:52px;padding:0 8px 0 16px;border:1px solid var(--glass-edge);border-radius:26px;background:var(--glass);box-shadow:var(--glass-shadow);
+  -webkit-backdrop-filter:blur(20px) saturate(1.8);backdrop-filter:blur(20px) saturate(1.8);color:var(--muted);font-size:16px;text-align:left}
+.srchdock svg{width:20px;height:20px;flex:none}
+.srchdock.on{bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+.srchdock.on:focus-within{border-color:var(--accent);box-shadow:var(--glass-shadow),0 0 0 1px var(--accent)}
+.srchdock input{flex:1;min-width:0;border:0;background:none;outline:none;font-size:16px;color:var(--ink);padding:0;height:100%}
+.srchdock .srch-x{flex:none;height:40px;padding:0 12px;border-radius:20px}
+.dockpad{height:72px}
 </style>
 </head>
 <body>
@@ -998,11 +1022,12 @@ function render(){
   document.getElementById("tab-resumen").setAttribute("aria-selected",S.tab==="resumen");
   document.getElementById("tab-vehiculos").setAttribute("aria-selected",S.tab==="vehiculos");
   document.getElementById("fabLabel").textContent = S.tab==="vehiculos" ? "Service" : "Cargar";
-  document.getElementById("fab").hidden = S.tab==="plata";
+  document.getElementById("fab").hidden = S.tab!=="vehiculos";
   const f2=document.getElementById("fab2"); f2.hidden = S.tab!=="vehiculos";
   if(!f2.hidden){ const w=document.getElementById("fab").offsetWidth; if(w) document.documentElement.style.setProperty("--fabw",w+"px"); }
   document.getElementById("btnSearch").hidden = gate;
   const searching = S.search!==null && S.search!==undefined && S.tab==="movs";
+  document.querySelector("nav.tabs").hidden = searching;
   document.getElementById("btnSearch").setAttribute("aria-pressed", searching);
   if(searching){
     const had=document.activeElement && document.activeElement.id==="q", pos=had?document.activeElement.selectionStart:null;
@@ -1096,9 +1121,10 @@ function renderPlata(){
 const FILTROS=[["todos","Todos"],["gastos","Gastos"],["ingresos","Ingresos"],["tarjetas","Tarjetas"],["pend","Por cobrar"]];
 function renderMovs(){
   const ym=S.month, f=S.filtro||"todos";
-  let h=monthBar(ym)+`<button class="fakesrch" data-act="buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Buscar en todos los meses</button>`;
+  const dock=`<button class="srchdock" data-act="buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Buscar en todos los meses</button><div class="dockpad"></div>`;
+  let h=monthBar(ym);
   h+=`<div class="filtros" role="group" aria-label="Filtrar movimientos">${FILTROS.map(([k,l])=>`<button data-act="filtro" data-f="${k}" aria-pressed="${f===k}">${l}</button>`).join("")}</div>`;
-  if(S.mode==="loading") return h+`<div class="empty">Cargando tus datos…</div>`;
+  if(S.mode==="loading") return h+`<div class="empty">Cargando tus datos…</div>`+dock;
   let items = f==="pend" ? S.movs.filter(isPend).sort((a,b)=>(a.fechaEst||"9999")<(b.fechaEst||"9999")?-1:1) : monthItems(ym);
   if(f==="gastos") items=items.filter(m=>m._compra||m.tipo==="gasto");
   else if(f==="ingresos") items=items.filter(m=>!m._compra&&m.tipo==="ingreso");
@@ -1110,9 +1136,9 @@ function renderMovs(){
   }
   if(!items.length){
     const txt={todos:"Nada cargado en "+monthLabel(ym)+".",gastos:"Sin gastos en "+monthLabel(ym)+".",ingresos:"Sin ingresos en "+monthLabel(ym)+".",tarjetas:"Sin compras con tarjeta en "+monthLabel(ym)+".",pend:"No tenés nada por cobrar."}[f];
-    return h+`<div class="empty"><b>${txt}</b>Tocá <b style="display:inline">+ Cargar</b> para anotar un gasto o un ingreso.</div>`;
+    return h+`<div class="empty"><b>${txt}</b>Para anotar, usá los botones de Inicio.</div>`+dock;
   }
-  return h+(f==="pend" ? `<div class="list">${items.map(pendRow).join("")}</div>` : listHtml(items));
+  return h+(f==="pend" ? `<div class="list">${items.map(pendRow).join("")}</div>` : listHtml(items))+dock;
 }
 function cuando(iso){ const d=diasHasta(iso); return d===0?"hoy":d===-1?"ayer":fechaLarga(iso); }
 function listHtml(sorted,opt){
@@ -1182,10 +1208,10 @@ function renderSearchRes(){
     + listHtml(shown) + (res.length>shown.length?`<p class="hint">Mostrando los ${shown.length} más recientes.</p>`:"");
 }
 function renderSearch(){
-  return `<div class="srch"><div class="srch-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
-    <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Ej: YPF, Súper, débito, Visa" value="${esc(S.search||"")}" aria-label="Buscar movimientos"></div>
-    <button type="button" class="srch-x" data-act="closeSearch">Cerrar</button></div>
-    <div id="srch-res">${renderSearchRes()}</div>`;
+  return `<div id="srch-res">${renderSearchRes()}</div><div class="dockpad"></div>
+    <div class="srchdock on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Ej: YPF, Súper, débito, Visa" value="${esc(S.search||"")}" aria-label="Buscar movimientos">
+    <button type="button" class="srch-x" data-act="closeSearch">Cerrar</button></div>`;
 }
 function closeSearch(){ if(S.search===null) return; S.search=null; dropLayers(["search"]); render(); }
 function openSearch(){ if(S.tab!=="movs"){ if(!LAYERS.includes("tab")) pushLayer("tab"); S.tab="movs"; } if(S.search===null) pushLayer("search"); S.search=""; render(); window.scrollTo(0,0); const q=document.getElementById("q"); q&&q.focus(); }

@@ -363,7 +363,7 @@ const CAT_ABBR = Object.fromEntries(CATS);
 const CLASES = [["Esencial","var(--cl-es)"],["Innecesario","var(--cl-in)"],["Inversión","var(--cl-inv)"],["Un gusto","var(--cl-gu)"]];
 const CLASE_COL = Object.fromEntries(CLASES);
 const PAL = ["var(--c1)","var(--c2)","var(--c3)","var(--c4)","var(--c5)","var(--c6)"];
-const SERV_TIPOS = ["Cambio de aceite","Filtro de aceite","Filtro de aire","Transmisión: aceite y filtro","Agua","Service general","Cubiertas","Frenos","Cadena / correa","Batería","Filtros","Otro"];
+const SERV_TIPOS = ["Cambio de aceite","Filtro de aceite","Filtro de aire","Transmisión: aceite y filtro","Agua","Service general","Cubiertas","Frenos","Cadena / correa","Batería","Filtros"];
 function servTipos(s){ return Array.isArray(s.tipos)&&s.tipos.length ? s.tipos : (s.tipo?[s.tipo]:[]); }
 function servLabel(s){ return servTipos(s).join(" · "); }
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -654,6 +654,7 @@ async function importBackup(obj){
     c.vehiculos={ ...(c.vehiculos||{}), ...(b.vehiculos||{}) };
     c.tarjetas={ ...(c.tarjetas||{}), ...(b.tarjetas||{}) };
     c.fondos={ ...(c.fondos||{}), ...(b.fondos||{}) };
+    if(b.servTiposExtra) c.servTiposExtra=[...new Set([...(c.servTiposExtra||[]),...b.servTiposExtra])];
     if(b.fijos) c.fijos={ ...(b.fijos||{}), ...(c.fijos||{}) };
     if(Array.isArray(b.catsGasto)) c.catsGasto=[...new Set([...(Array.isArray(c.catsGasto)?c.catsGasto:gastoCats()),...b.catsGasto])];
     S.cfg=c;
@@ -1575,7 +1576,7 @@ function sheetServ(serv,vehDefault){
   const st = serv ? {...serv} : {id:uid(), veh:vehDefault||vehIds()[0], fecha:todayISO(), km:null, tipos:[], detalle:"", costo:null, proxKm:null, proxFecha:null};
   const linked = st.movId ? S.movs.find(m=>m.id===st.movId) : null;
   st.tipos=[...servTipos(st)];
-  const tiposLista=[...new Set([...SERV_TIPOS,...st.tipos])];
+  let tiposLista=[...new Set([...SERV_TIPOS,...(S.cfg.servTiposExtra||[]),...st.tipos])], addingT=false;
   const vn=v=>esc(vehNombre(v));
   const vids=vehIds(); if(st.veh && !vids.includes(st.veh)) vids.push(st.veh);
   openSheet(`
@@ -1605,9 +1606,27 @@ function sheetServ(serv,vehDefault){
     const paintVeh=()=>sh.querySelectorAll("[data-veh]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.veh===st.veh));
     paintVeh();
     sh.querySelector("#s-vehs").addEventListener("click",e=>{ const b=e.target.closest("[data-veh]"); if(b){ st.veh=b.dataset.veh; paintVeh(); }});
-    const paintTipos=()=>{ sh.querySelector("#s-tipos").innerHTML=tiposLista.map(t=>{ const on=st.tipos.includes(t); return `<button type="button" data-chip="${esc(t)}" aria-pressed="${on}">${on?"✓ ":""}${esc(t)}</button>`; }).join(""); };
+    const box=sh.querySelector("#s-tipos");
+    const paintTipos=()=>{
+      box.innerHTML=tiposLista.map(t=>{ const on=st.tipos.includes(t); return `<button type="button" data-chip="${esc(t)}" aria-pressed="${on}">${on?"✓ ":""}${esc(t)}</button>`; }).join("")
+        + (addingT ? `<div class="addrow"><input class="field" id="s-newt" maxlength="30" placeholder="Ej: Bujías, Embrague, Alineación" aria-label="Nueva etiqueta"><button type="button" id="s-newok">Agregar</button><button type="button" id="s-newx" style="background:var(--chip);color:var(--ink)" aria-label="Cancelar">✕</button></div>`
+                   : `<button type="button" class="addchip" id="s-addt">+ Agregar etiqueta</button>`);
+      if(addingT){ const i=box.querySelector("#s-newt"); setTimeout(()=>i.focus(),30); i.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addTipo(); } }); }
+    };
+    const addTipo=async()=>{
+      const n=(box.querySelector("#s-newt").value||"").trim().replace(/\s+/g," ");
+      if(!n){ sh.querySelector("#s-err").textContent="Escribí el nombre de la etiqueta."; return; }
+      const ya=tiposLista.find(t=>t.toLowerCase()===n.toLowerCase());
+      if(!ya){ S.cfg.servTiposExtra=[...(S.cfg.servTiposExtra||[]),n]; tiposLista=[...tiposLista,n]; await saveCfg(); }
+      const t=ya||n; if(!st.tipos.includes(t)) st.tipos=[...st.tipos,t];
+      addingT=false; sh.querySelector("#s-err").textContent=""; paintTipos(); toast(ya?"Ya existía, la marqué":"Etiqueta agregada");
+    };
     paintTipos();
-    sh.querySelector("#s-tipos").addEventListener("click",e=>{ const b=e.target.closest("[data-chip]"); if(!b) return; const t=b.dataset.chip; st.tipos = st.tipos.includes(t) ? st.tipos.filter(x=>x!==t) : [...st.tipos,t]; paintTipos(); });
+    box.addEventListener("click",e=>{
+      if(e.target.closest("#s-addt")){ addingT=true; paintTipos(); return; }
+      if(e.target.closest("#s-newok")){ addTipo(); return; }
+      if(e.target.closest("#s-newx")){ addingT=false; paintTipos(); return; }
+      const b=e.target.closest("[data-chip]"); if(!b) return; const t=b.dataset.chip; st.tipos = st.tipos.includes(t) ? st.tipos.filter(x=>x!==t) : [...st.tipos,t]; paintTipos(); });
     const kmIn=sh.querySelector("#s-km"), pkm=sh.querySelector("#s-pkm"), pf=sh.querySelector("#s-pfecha");
     if(!editing){ const c=vehKm(st.veh); kmIn.placeholder = c? "Último: "+km(c) : "Ej: 45.200"; }
     [kmIn,pkm].forEach(i=>i.addEventListener("input",()=>{ const n=parseKm(i.value); i.value=n?km(n):""; }));
@@ -1746,7 +1765,7 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 9</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 10</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);

@@ -1,6 +1,6 @@
 // Libreta: guarda la app en el celu para que abra sin señal.
 // Los datos los maneja Firestore aparte (tiene su propia caché), acá solo va la app.
-const CACHE = "libreta-v14";
+const CACHE = "libreta-v15";
 const APP = ["./", "index.html", "manifest.webmanifest", "cotiz.json",
   "icons/icon-192-libreta.png", "icons/icon-512-libreta.png", "icons/maskable-512-libreta.png", "icons/apple-touch-icon-libreta.png"];
 

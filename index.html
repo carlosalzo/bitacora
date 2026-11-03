@@ -344,6 +344,8 @@ nav.tabs .in{grid-template-columns:repeat(4,minmax(0,1fr))}
 .hoja .bar i{display:block;height:100%;border-radius:4px;background:var(--paper-neg)}
 .hoja .ef{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .hoja .val{font-family:var(--f-display);font-weight:600;font-size:24px;white-space:nowrap}
+.hoja .carry{font-family:var(--f-display);font-weight:600;font-size:18px;white-space:nowrap;color:var(--paper-ink)}
+.hoja .carry.neg{color:var(--paper-neg)}
 .hoja .val.pos{color:var(--paper-pos)} .hoja .val.neg{color:var(--paper-neg)}
 /* Accesos rápidos */
 .quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:24px}
@@ -1055,22 +1057,32 @@ function monthItems(ym){
   return [...movs,...compras].sort((a,b)=> a.fecha===b.fecha ? (b.creado||0)-(a.creado||0) : (a.fecha<b.fecha?1:-1));
 }
 /* La hoja de libreta con el saldo: 7 renglones de 32 px */
+/* Lo que quedó de los meses anteriores: todo lo cobrado menos todo lo gastado antes de este mes */
+function saldoAnterior(ym){
+  const ini=ym+"-01"; let s=0;
+  S.movs.forEach(m=>{ if(isPend(m) || !m.fecha || m.fecha>=ini) return; s += m.tipo==="ingreso" ? m.monto : m.tipo==="gasto" ? -m.monto : 0; });
+  return Math.round(s*100)/100;
+}
 function hojaHtml(ym,ing,gas){
-  const saldo=ing-gas, hoy=todayISO(), actual=ym===hoy.slice(0,7);
+  const ant=saldoAnterior(ym), hayAnt=Math.abs(ant)>=0.5;
+  const saldo=ant+ing-gas, hoy=todayISO(), actual=ym===hoy.slice(0,7);
+  const disp=Math.max(0,ant)+ing;
   const lab = !actual ? "Saldo del mes" : saldo<0 ? "Te pasaste este mes" : "Te quedan este mes";
   const r=latestRate();
-  const p = ing>0 ? Math.min(100,Math.round(gas/ing*100)) : (gas>0?100:0);
+  const p = disp>0 ? Math.min(100,Math.round(gas/disp*100)) : (gas>0?100:0);
   const finMes=new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate(), faltan=finMes-Number(hoy.slice(8,10));
-  const txt = ing>0 ? "Gastaste el "+Math.round(gas/ing*100)+"% de lo que entró" : gas>0 ? "Todavía no cargaste ingresos" : "Sin movimientos todavía";
+  const txt = disp>0 ? "Gastaste el "+Math.round(gas/disp*100)+"% de lo que "+(ant>0.5?"tenías":"entró") : gas>0 ? "Todavía no cargaste ingresos" : "Sin movimientos todavía";
+  const antT=(ant<0?"−":"+")+money(Math.abs(ant)), mesAnt=MESES[Number(shiftMonth(ym,-1).slice(5,7))-1];
   const fit=(t,base,steps)=>{ const n=t.length; let f=base; steps.forEach(([len,sz])=>{ if(n>len) f=sz; }); return f; };
   const bigT=(saldo<0?"−":"")+money(Math.abs(saldo)), ingT="+"+money(ing), gasT="−"+money(gas);
   const valF=Math.min(fit(ingT,24,[[12,20],[14,18]]),fit(gasT,24,[[12,20],[14,18]]));
   const cola = actual ? (faltan===0?"Último día del mes":"Faltan "+faltan+(faltan===1?" día":" días")) : "";
   return `<section class="hoja" aria-label="Saldo del mes">
-    <div class="r"><span class="lab">${lab}</span>${r&&(ing||gas)?`<span class="meta num">≈ ${saldo<0?"−":""}${usd(Math.abs(saldo)/r)} al MEP</span>`:""}</div>
+    <div class="r"><span class="lab">${lab}</span>${r&&(ing||gas||hayAnt)?`<span class="meta num">≈ ${saldo<0?"−":""}${usd(Math.abs(saldo)/r)} al MEP</span>`:""}</div>
     <div class="r r2"><span class="big num${saldo<0?" neg":""}" style="font-size:${fit(bigT,56,[[10,48],[12,40],[14,34]])}px">${bigT}</span></div>
     <div class="r mid"><div class="bar" role="img" aria-label="${esc(txt)}"><i style="width:${p}%"></i></div></div>
     <div class="r"><span class="meta">${txt}</span>${cola?`<span class="meta">${cola}</span>`:""}</div>
+    ${hayAnt?`<div class="r"><span class="meta">Venís de ${mesAnt}</span><span class="carry num${ant<0?" neg":""}">${antT}</span></div>`:""}
     <div class="ef"><div><div class="r"><span class="lab">Entró</span></div><div class="r"><span class="val pos num" style="font-size:${valF}px">${ingT}</span></div></div>
       <div><div class="r"><span class="lab">Salió</span></div><div class="r"><span class="val neg num" style="font-size:${valF}px">${gasT}</span></div></div></div>
   </section>`;
@@ -1967,7 +1979,7 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 11</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 12</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);

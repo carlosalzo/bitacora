@@ -323,6 +323,9 @@ h3.sec .linkbtn{letter-spacing:0;text-transform:none;font-size:14px}
 .docs .docrow:first-child{border-top:0}
 .pill.none{background:var(--chip);color:var(--muted)}
 .flabel-note{text-transform:none;letter-spacing:0;font-weight:500;margin-left:6px}
+.pushhora{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px}
+.pushhora label{font-weight:600}
+.pushhora select{width:auto;min-width:110px}
 .filebtn{display:flex;align-items:center;justify-content:center;cursor:pointer;text-align:center}
 
 /* ---------- Rediseño C: Inicio, Movimientos e íconos (grilla de 8 px) ---------- */
@@ -816,7 +819,9 @@ function abrirDesdeAviso(){
     setTimeout(()=>{ if(!S.setup) sheetMov(null,null,{tipo:"gasto"}); },60); }catch(e){}
 }
 /* ---------- Recordatorio diario (notificaciones push con Firebase Cloud Messaging) ---------- */
-const PUSH_HORA="21:00";
+const PUSH_HORAS=Array.from({length:18},(_,i)=>String(i+6).padStart(2,"0")+":00");
+function pushHora(){ const h=lsGet("push-hora"); return PUSH_HORAS.includes(h)?h:"21:00"; }
+function horaTxt(h){ return Number(h.slice(0,2))+" hs"; }
 function pushSoportado(){ return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
 function esIOS(){ return /iPhone|iPad|iPod/.test(navigator.userAgent); }
 function esInstalada(){ return (window.matchMedia&&matchMedia("(display-mode: standalone)").matches) || navigator.standalone===true; }
@@ -838,7 +843,7 @@ async function pushToken(){
 async function pushGuardar(token){
   const id=tokenId(token), prev=lsGet("push-id");
   if(prev && prev!==id) FB.fsM.deleteDoc(uref("push",prev)).catch(()=>{});
-  await FB.fsM.setDoc(uref("push",id),{token,hora:PUSH_HORA,dispositivo:(esIOS()?"iPhone":/Android/.test(navigator.userAgent)?"Android":"Compu"),actualizado:Date.now()});
+  await FB.fsM.setDoc(uref("push",id),{token,hora:pushHora(),dispositivo:(esIOS()?"iPhone":/Android/.test(navigator.userAgent)?"Android":"Compu"),actualizado:Date.now()});
   lsSet("push-id",id);
 }
 async function pushActivar(){
@@ -861,33 +866,43 @@ async function pushRefrescar(){
   if(pushEstado()!=="on") return;
   try{ const {token}=await pushToken(); if(lsGet("push-id")!==tokenId(token)) await pushGuardar(token); else FB.fsM.setDoc(uref("push",tokenId(token)),{actualizado:Date.now()},{merge:true}).catch(()=>{}); }catch(e){ console.warn("push",e); }
 }
+async function pushCambiarHora(h){
+  lsSet("push-hora",h);
+  const id=lsGet("push-id"); if(id) await FB.fsM.setDoc(uref("push",id),{hora:h,actualizado:Date.now()},{merge:true});
+}
 async function pushPrueba(){
   const reg=await navigator.serviceWorker.ready;
-  await reg.showNotification("Libreta",{body:"Así te va a llegar el recordatorio de las 21 hs.",icon:"icons/icon-192-libreta.png",badge:"icons/icon-192-libreta.png",tag:"libreta-prueba"});
+  await reg.showNotification("Libreta",{body:"Así te va a llegar el recordatorio de las "+horaTxt(pushHora())+".",icon:"icons/icon-192-libreta.png",badge:"icons/icon-192-libreta.png",tag:"libreta-prueba"});
 }
 function pushHtml(){
   const e=pushEstado();
   const txt={
-    on:"Activado en este dispositivo. Te aviso todos los días a las 21 hs para que cargues tus gastos.",
-    off:"Te aviso todos los días a las 21 hs para que cargues tus gastos.",
+    on:"Activado en este dispositivo. Te aviso todos los días para que cargues tus gastos.",
+    off:"Te aviso todos los días, a la hora que elijas, para que cargues tus gastos.",
     bloqueado:"Las notificaciones están bloqueadas para Libreta. Habilitalas en los ajustes del celu (Notificaciones) y volvé a intentar.",
     "ios-safari":"En iPhone, primero agregá Libreta a la pantalla de inicio (Compartir → Agregar a inicio) y abrila desde ese ícono. Ahí vas a poder activarlo.",
     no:"Este navegador no permite notificaciones. Probá con la app instalada en el celu."
   }[e];
   const btn = e==="on" ? `<button type="button" class="ghost" id="c-push-off" style="flex:1">Desactivar</button><button type="button" class="ghost" id="c-push-test" style="flex:1">Probar</button>`
     : e==="off" ? `<button type="button" class="primary" id="c-push-on" style="flex:1;padding:12px">Activar recordatorio</button>` : "";
-  return `<span class="flabel" style="margin-top:22px">Recordatorio diario</span><p class="hint" style="margin-top:0">${txt}</p>${btn?`<div class="actions" style="margin-top:8px">${btn}</div>`:""}<div class="err" id="c-push-err"></div>`;
+  const sel = (e==="on"||e==="off") ? `<div class="pushhora"><label for="c-push-hora">Hora del aviso</label><select class="field" id="c-push-hora">${PUSH_HORAS.map(h=>`<option value="${h}"${h===pushHora()?" selected":""}>${h}</option>`).join("")}</select></div>` : "";
+  return `<span class="flabel" style="margin-top:22px">Recordatorio diario</span><p class="hint" style="margin-top:0">${txt}</p>${sel}${btn?`<div class="actions" style="margin-top:8px">${btn}</div>`:""}<div class="err" id="c-push-err"></div>`;
 }
 function wirePush(sh){
   const err=sh.querySelector("#c-push-err");
   const on=sh.querySelector("#c-push-on"), off=sh.querySelector("#c-push-off"), test=sh.querySelector("#c-push-test");
   on&&on.addEventListener("click",async()=>{
     on.disabled=true; on.textContent="Activando…";
-    try{ await pushActivar(); closeSheet(); toast("Listo: te aviso todos los días a las 21 hs"); pushPrueba().catch(()=>{}); }
+    try{ await pushActivar(); closeSheet(); toast("Listo: te aviso todos los días a las "+horaTxt(pushHora())); pushPrueba().catch(()=>{}); }
     catch(e){ on.disabled=false; on.textContent="Activar recordatorio";
       err.textContent = e.message==="bloqueado" ? "Bloqueaste las notificaciones. Habilitalas en los ajustes del celu para Libreta y volvé a intentar."
         : e.message==="sin-permiso" ? "Para avisarte necesito que permitas las notificaciones."
         : "No se pudo activar ("+((e&&(e.code||e.message))||"error")+"). Revisá la conexión y probá de nuevo."; }
+  });
+  const hs=sh.querySelector("#c-push-hora");
+  hs&&hs.addEventListener("change",async()=>{
+    try{ await pushCambiarHora(hs.value); if(pushEstado()==="on") toast("Te aviso a las "+horaTxt(hs.value)); }
+    catch(e){ err.textContent="No se pudo cambiar la hora. Revisá la conexión y probá de nuevo."; }
   });
   off&&off.addEventListener("click",async()=>{ await pushDesactivar(); closeSheet(); toast("Recordatorio desactivado"); });
   test&&test.addEventListener("click",()=>pushPrueba().then(()=>toast("Te mandé una de prueba")).catch(()=>{ err.textContent="No se pudo mostrar la notificación de prueba."; }));
@@ -2064,7 +2079,7 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 13</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 14</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);

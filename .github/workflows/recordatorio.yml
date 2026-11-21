@@ -2,8 +2,13 @@ name: Recordatorio diario
 
 on:
   schedule:
-    - cron: "45 23 * * *"   # 20:45 en Argentina: GitHub suele demorar unos minutos, llega cerca de las 21
+    - cron: "47 * * * *"   # cada hora; cada dispositivo recibe el aviso a la hora que eligió
   workflow_dispatch:
+    inputs:
+      forzar:
+        description: "Mandar ya a todos (prueba)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,4 +22,5 @@ jobs:
       - name: Mandar recordatorio
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FORZAR: ${{ github.event.inputs.forzar }}
         run: python3 scripts/recordatorio.py

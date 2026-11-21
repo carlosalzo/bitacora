@@ -653,7 +653,7 @@ async function initStore(){
     if(!u){ S.setup=null; S.mode="auth"; S.movs=[]; S.servs=[]; S.compras=[]; S.cfg=defaultCfg(); S.cotizMan=null; mergeCotiz(); render(); return; }
     S.mode="loading"; S.authErr=null; render();
     const ready={movs:0,servs:0,cfg:0,compras:0};
-    const done=()=>{ if(ready.movs&&ready.servs&&ready.cfg&&ready.compras) S.mode="db"; render(); };
+    const done=()=>{ if(ready.movs&&ready.servs&&ready.cfg&&ready.compras && S.mode!=="db"){ S.mode="db"; pushRefrescar(); abrirDesdeAviso(); } render(); };
     const onErr=e=>{ console.error(e); toast("No se pudieron leer tus datos ("+((e&&e.code)||"error")+")."); };
     const { onSnapshot } = FB.fsM;
     UNSUBS.push(onSnapshot(ucol("movs"), s=>{ S.movs=s.docs.map(d=>d.data()); ready.movs=1; done(); }, onErr));
@@ -809,6 +809,90 @@ function pendRow(m){
   const amt = m.moneda==="USD" ? usd(m.montoOrig) : money(m.monto);
   return `<div class="item pendrow"><button class="pedit" data-act="editMov" data-id="${esc(m.id)}"><span class="tag pend">${catIco(m.cat)||"$"}</span><span class="t"><b>${esc(m.cat)}</b><span class="${venc?"late":""}">${esc(when)}${m.nota?" · "+esc(m.nota):""}</span></span></button><div class="pr"><span class="amt num pend">+${amt}</span><button class="cobrado" data-act="cobrar" data-id="${esc(m.id)}">✓ Cobrado</button></div></div>`;
 }
+
+function abrirDesdeAviso(){
+  try{ const u=new URL(location.href); if(u.searchParams.get("cargar")!=="gasto") return;
+    u.searchParams.delete("cargar"); history.replaceState(history.state,"",u.pathname+u.search+u.hash);
+    setTimeout(()=>{ if(!S.setup) sheetMov(null,null,{tipo:"gasto"}); },60); }catch(e){}
+}
+/* ---------- Recordatorio diario (notificaciones push con Firebase Cloud Messaging) ---------- */
+const PUSH_HORA="21:00";
+function pushSoportado(){ return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+function esIOS(){ return /iPhone|iPad|iPod/.test(navigator.userAgent); }
+function esInstalada(){ return (window.matchMedia&&matchMedia("(display-mode: standalone)").matches) || navigator.standalone===true; }
+function pushEstado(){
+  if(!pushSoportado()) return esIOS()&&!esInstalada() ? "ios-safari" : "no";
+  if(Notification.permission==="denied") return "bloqueado";
+  return (Notification.permission==="granted" && lsGet("push")==="on") ? "on" : "off";
+}
+function tokenId(t){ let h=5381; for(let i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))>>>0; return "d"+h.toString(36)+t.length.toString(36); }
+async function pushToken(){
+  const m=await import("https://www.gstatic.com/firebasejs/"+FB_V+"/firebase-messaging.js");
+  if(!(await m.isSupported())) throw new Error("no-soportado");
+  const reg=await navigator.serviceWorker.register("sw.js");
+  await navigator.serviceWorker.ready;
+  const token=await m.getToken(m.getMessaging(FB.app),{serviceWorkerRegistration:reg});
+  if(!token) throw new Error("sin-token");
+  return {m,token};
+}
+async function pushGuardar(token){
+  const id=tokenId(token), prev=lsGet("push-id");
+  if(prev && prev!==id) FB.fsM.deleteDoc(uref("push",prev)).catch(()=>{});
+  await FB.fsM.setDoc(uref("push",id),{token,hora:PUSH_HORA,dispositivo:(esIOS()?"iPhone":/Android/.test(navigator.userAgent)?"Android":"Compu"),actualizado:Date.now()});
+  lsSet("push-id",id);
+}
+async function pushActivar(){
+  if(Notification.permission!=="granted"){
+    const p=await Notification.requestPermission();
+    if(p!=="granted") throw new Error(p==="denied"?"bloqueado":"sin-permiso");
+  }
+  const {token}=await pushToken();
+  await pushGuardar(token);
+  lsSet("push","on");
+}
+async function pushDesactivar(){
+  lsSet("push","off");
+  const id=lsGet("push-id"); if(id) FB.fsM.deleteDoc(uref("push",id)).catch(()=>{});
+  lsSet("push-id","");
+  try{ const {m}=await pushToken(); await m.deleteToken(m.getMessaging(FB.app)); }catch(e){}
+}
+/* Al abrir la app: renueva el token si cambió, para que el aviso siga llegando */
+async function pushRefrescar(){
+  if(pushEstado()!=="on") return;
+  try{ const {token}=await pushToken(); if(lsGet("push-id")!==tokenId(token)) await pushGuardar(token); else FB.fsM.setDoc(uref("push",tokenId(token)),{actualizado:Date.now()},{merge:true}).catch(()=>{}); }catch(e){ console.warn("push",e); }
+}
+async function pushPrueba(){
+  const reg=await navigator.serviceWorker.ready;
+  await reg.showNotification("Libreta",{body:"Así te va a llegar el recordatorio de las 21 hs.",icon:"icons/icon-192-libreta.png",badge:"icons/icon-192-libreta.png",tag:"libreta-prueba"});
+}
+function pushHtml(){
+  const e=pushEstado();
+  const txt={
+    on:"Activado en este dispositivo. Te aviso todos los días a las 21 hs para que cargues tus gastos.",
+    off:"Te aviso todos los días a las 21 hs para que cargues tus gastos.",
+    bloqueado:"Las notificaciones están bloqueadas para Libreta. Habilitalas en los ajustes del celu (Notificaciones) y volvé a intentar.",
+    "ios-safari":"En iPhone, primero agregá Libreta a la pantalla de inicio (Compartir → Agregar a inicio) y abrila desde ese ícono. Ahí vas a poder activarlo.",
+    no:"Este navegador no permite notificaciones. Probá con la app instalada en el celu."
+  }[e];
+  const btn = e==="on" ? `<button type="button" class="ghost" id="c-push-off" style="flex:1">Desactivar</button><button type="button" class="ghost" id="c-push-test" style="flex:1">Probar</button>`
+    : e==="off" ? `<button type="button" class="primary" id="c-push-on" style="flex:1;padding:12px">Activar recordatorio</button>` : "";
+  return `<span class="flabel" style="margin-top:22px">Recordatorio diario</span><p class="hint" style="margin-top:0">${txt}</p>${btn?`<div class="actions" style="margin-top:8px">${btn}</div>`:""}<div class="err" id="c-push-err"></div>`;
+}
+function wirePush(sh){
+  const err=sh.querySelector("#c-push-err");
+  const on=sh.querySelector("#c-push-on"), off=sh.querySelector("#c-push-off"), test=sh.querySelector("#c-push-test");
+  on&&on.addEventListener("click",async()=>{
+    on.disabled=true; on.textContent="Activando…";
+    try{ await pushActivar(); closeSheet(); toast("Listo: te aviso todos los días a las 21 hs"); pushPrueba().catch(()=>{}); }
+    catch(e){ on.disabled=false; on.textContent="Activar recordatorio";
+      err.textContent = e.message==="bloqueado" ? "Bloqueaste las notificaciones. Habilitalas en los ajustes del celu para Libreta y volvé a intentar."
+        : e.message==="sin-permiso" ? "Para avisarte necesito que permitas las notificaciones."
+        : "No se pudo activar ("+((e&&(e.code||e.message))||"error")+"). Revisá la conexión y probá de nuevo."; }
+  });
+  off&&off.addEventListener("click",async()=>{ await pushDesactivar(); closeSheet(); toast("Recordatorio desactivado"); });
+  test&&test.addEventListener("click",()=>pushPrueba().then(()=>toast("Te mandé una de prueba")).catch(()=>{ err.textContent="No se pudo mostrar la notificación de prueba."; }));
+}
+
 /* ---------- Medios de pago, tarjetas, cuotas y saldos ---------- */
 const MEDIOS=[["efectivo","Efectivo"],["transferencia","Transferencia"],["debito","Débito"],["credito","Crédito"]];
 const MEDIO_LBL=Object.fromEntries(MEDIOS);
@@ -1969,6 +2053,7 @@ function sheetCfg(){
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-gcats" style="flex:1">Gastos (${gastoCats().length})</button><button type="button" class="ghost" id="c-icats" style="flex:1">Ingresos (${S.cfg.trabajos.length})</button></div>
     <span class="flabel" style="margin-top:22px">Tarjetas de crédito</span>
     <div class="chips" id="c-tarjs">${tarjIds().map(id=>`<button type="button" data-tj="${esc(id)}">${esc(tarjNombre(id))}</button>`).join("")}<button type="button" class="addchip" data-tj="">+ Nueva tarjeta</button></div>
+    ${pushHtml()}
     <span class="flabel" style="margin-top:22px">Dólar MEP</span>
     <p class="hint" style="margin-top:0">${S.cotiz&&S.cotiz.ultima ? "Última: "+money(S.cotiz.ultima.venta)+" del "+fechaCorta(S.cotiz.ultima.fecha)+(S.cotiz.ultima.manual?" (cargada a mano).":".") : "Todavía no hay cotización cargada."} Se actualiza sola los días hábiles a la tarde. Si hace falta, cargá la de hoy a mano:</p>
     <div class="addrow" style="margin-top:8px"><input class="field num" id="c-cot" inputmode="decimal" placeholder="Ej: 1.529,50" aria-label="Cotización de hoy"><button type="button" id="c-cotok">Guardar</button></div>
@@ -1979,13 +2064,14 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 12</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 13</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);
       if(!(v>0)){ toast("Ingresá una cotización válida."); return; }
       if(await saveCotizManual(v)){ closeSheet(); toast("Cotización guardada"); }
     });
+    wirePush(sh);
     sh.querySelector("#c-gcats").addEventListener("click",()=>sheetCats("gasto"));
     sh.querySelector("#c-tarjs").addEventListener("click",e=>{ const b=e.target.closest("[data-tj]"); if(b) sheetTarjeta(b.dataset.tj||null); });
     sh.querySelector("#c-icats").addEventListener("click",()=>sheetCats("ingreso"));

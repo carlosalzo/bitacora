@@ -326,6 +326,11 @@ h3.sec .linkbtn{letter-spacing:0;text-transform:none;font-size:14px}
 .pushhora{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px}
 .pushhora label{font-weight:600}
 .pushhora select{width:auto;min-width:110px}
+.hoja .r-end{display:flex;align-items:flex-end;gap:6px;min-width:0}
+.hoja .ojo{flex:none;width:32px;height:28px;margin:-6px -6px -4px 0;border:0;background:none;color:var(--paper-muted);border-radius:8px;display:grid;place-items:center;cursor:pointer}
+.hoja .ojo svg{width:20px;height:20px}
+.hoja .ojo[aria-pressed="true"]{color:var(--paper-ink)}
+@media (hover:hover){.hoja .ojo:hover{background:var(--paper-track)}}
 .filebtn{display:flex;align-items:center;justify-content:center;cursor:pointer;text-align:center}
 
 /* ---------- Rediseño C: Inicio, Movimientos e íconos (grilla de 8 px) ---------- */
@@ -556,6 +561,14 @@ function uid(){ try{ return crypto.randomUUID(); }catch(e){ return Date.now().to
 const nf0 = new Intl.NumberFormat("es-AR",{maximumFractionDigits:2});
 const nfKm = new Intl.NumberFormat("es-AR",{maximumFractionDigits:0});
 function money(n){ return "$ " + nf0.format(Math.round(n*100)/100); }
+/* Totales grandes: sin decimales, y ocultos si tocaste el ojito */
+function moneyR(n){ return "$ " + nfKm.format(Math.round(n)); }
+const OCULTO="$ •••••";
+function oculto(){ return lsGet("oculto")==="1"; }
+const OJO={
+  ver:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  no:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-2.6 3.5M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a9.6 9.6 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>`
+};
 function km(n){ return nfKm.format(n||0); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function parseMonto(str){
@@ -1001,11 +1014,12 @@ function fondoSaldo(id){
   });
   return Math.round(s*100)/100;
 }
+function fondoFmtR(id,v){ return ((S.cfg.fondos||{})[id]||{}).moneda==="USD" ? "US$ "+nfKm.format(Math.round(v)) : moneyR(v); }
 function renderFondos(){
   const ids=fondoIds();
   if(!ids.length) return `<button class="fondo-cta" data-act="newFondo"><span><b>¿Cuánta plata tenés?</b><span>Cargá tu efectivo y tus billeteras y la app lleva la cuenta sola.</span></span><span class="go">›</span></button>`;
   return `<h3 class="sec">Tu plata <button class="linkbtn" data-act="newFondo">+ Agregar</button></h3><div class="fondos">`+ids.map(id=>{ const v=fondoSaldo(id);
-    return `<button class="fondo" data-act="editFondo" data-id="${esc(id)}"><span>${esc(fondoNombre(id))}</span><b class="num${v<0?" neg":""}">${v<0?"−":""}${fondoFmt(id,Math.abs(v))}</b></button>`; }).join("")
+    return `<button class="fondo" data-act="editFondo" data-id="${esc(id)}"><span>${esc(fondoNombre(id))}</span><b class="num${v<0&&!oculto()?" neg":""}">${oculto()?OCULTO:(v<0?"−":"")+fondoFmtR(id,Math.abs(v))}</b></button>`; }).join("")
     +`</div>`;
 }
 function sheetFondo(id){
@@ -1171,17 +1185,18 @@ function hojaHtml(ym,ing,gas){
   const p = disp>0 ? Math.min(100,Math.round(gas/disp*100)) : (gas>0?100:0);
   const finMes=new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate(), faltan=finMes-Number(hoy.slice(8,10));
   const txt = disp>0 ? "Gastaste el "+Math.round(gas/disp*100)+"% de lo que "+(ant>0.5?"tenías":"entró") : gas>0 ? "Todavía no cargaste ingresos" : "Sin movimientos todavía";
-  const antT=(ant<0?"−":"+")+money(Math.abs(ant)), mesAnt=MESES[Number(shiftMonth(ym,-1).slice(5,7))-1];
+  const oc=oculto(), M=v=>oc?OCULTO:moneyR(v);
+  const antT=oc?OCULTO:(ant<0?"−":"+")+moneyR(Math.abs(ant)), mesAnt=MESES[Number(shiftMonth(ym,-1).slice(5,7))-1];
   const fit=(t,base,steps)=>{ const n=t.length; let f=base; steps.forEach(([len,sz])=>{ if(n>len) f=sz; }); return f; };
-  const bigT=(saldo<0?"−":"")+money(Math.abs(saldo)), ingT="+"+money(ing), gasT="−"+money(gas);
+  const bigT=oc?OCULTO:(saldo<0?"−":"")+moneyR(Math.abs(saldo)), ingT=oc?OCULTO:"+"+moneyR(ing), gasT=oc?OCULTO:"−"+moneyR(gas);
   const valF=Math.min(fit(ingT,24,[[12,20],[14,18]]),fit(gasT,24,[[12,20],[14,18]]));
   const cola = actual ? (faltan===0?"Último día del mes":"Faltan "+faltan+(faltan===1?" día":" días")) : "";
   return `<section class="hoja" aria-label="Saldo del mes">
-    <div class="r"><span class="lab">${lab}</span>${r&&(ing||gas||hayAnt)?`<span class="meta num">≈ ${saldo<0?"−":""}${usd(Math.abs(saldo)/r)} al MEP</span>`:""}</div>
-    <div class="r r2"><span class="big num${saldo<0?" neg":""}" style="font-size:${fit(bigT,56,[[10,48],[12,40],[14,34]])}px">${bigT}</span></div>
+    <div class="r"><span class="lab">${lab}</span><span class="r-end">${!oc&&r&&(ing||gas||hayAnt)?`<span class="meta num">≈ ${saldo<0?"−":""}US$ ${nfKm.format(Math.round(Math.abs(saldo)/r))}</span>`:""}<button class="ojo" data-act="ojo" aria-pressed="${oc}" aria-label="${oc?"Mostrar montos":"Ocultar montos"}" title="${oc?"Mostrar montos":"Ocultar montos"}">${oc?OJO.no:OJO.ver}</button></span></div>
+    <div class="r r2"><span class="big num${saldo<0&&!oc?" neg":""}" style="font-size:${fit(bigT,56,[[10,48],[12,40],[14,34]])}px">${bigT}</span></div>
     <div class="r mid"><div class="bar" role="img" aria-label="${esc(txt)}"><i style="width:${p}%"></i></div></div>
     <div class="r"><span class="meta">${txt}</span>${cola?`<span class="meta">${cola}</span>`:""}</div>
-    ${hayAnt?`<div class="r"><span class="meta">Venís de ${mesAnt}</span><span class="carry num${ant<0?" neg":""}">${antT}</span></div>`:""}
+    ${hayAnt?`<div class="r"><span class="meta">Venís de ${mesAnt}</span><span class="carry num${ant<0&&!oc?" neg":""}">${antT}</span></div>`:""}
     <div class="ef"><div><div class="r"><span class="lab">Entró</span></div><div class="r"><span class="val pos num" style="font-size:${valF}px">${ingT}</span></div></div>
       <div><div class="r"><span class="lab">Salió</span></div><div class="r"><span class="val neg num" style="font-size:${valF}px">${gasT}</span></div></div></div>
   </section>`;
@@ -2079,7 +2094,7 @@ function sheetCfg(){
     <div class="err" id="c-err"></div>
     <span class="flabel" style="margin-top:22px">Cuenta</span>
     <div class="actions" style="margin-top:0"><button type="button" class="ghost" id="c-out" style="flex:1">Cerrar sesión</button></div>
-    <p class="hint" style="margin-top:14px">Libreta · versión 14</p>`,
+    <p class="hint" style="margin-top:14px">Libreta · versión 15</p>`,
   sh=>{
     sh.querySelector("#c-cotok").addEventListener("click",async()=>{
       const v=parseMonto(sh.querySelector("#c-cot").value);
@@ -2123,6 +2138,7 @@ document.getElementById("view").addEventListener("click",e=>{
   if(a==="retry"){ location.reload(); return; }
   if(a==="mes"){ S.month=shiftMonth(S.month,Number(b.dataset.n)); render(); }
   else if(a==="tab"){ setTab(b.dataset.tab); }
+  else if(a==="ojo"){ lsSet("oculto",oculto()?"0":"1"); render(); toast(oculto()?"Montos ocultos":"Montos visibles"); }
   else if(a==="nuevo"){ const t=b.dataset.tipo; sheetMov(null,null, t==="pend"?{tipo:"ingreso",estado:"pendiente"}:{tipo:t}); }
   else if(a==="qkm"){ const ids=vehIds(); if(!ids.length) sheetVeh(null); else if(ids.length===1) sheetKm(ids[0]); else setTab("vehiculos"); }
   else if(a==="filtro"){ S.filtro=b.dataset.f; render(); }
